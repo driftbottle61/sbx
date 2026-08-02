@@ -1,0 +1,18 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell syntax
+        run: bash -n install.sh uninstall.sh sbx sbx-route lib/*.sh tests/*.sh
+      - name: Test installer
+        run: sudo tests/install_test.sh

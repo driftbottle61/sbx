@@ -1,0 +1,8 @@
+#!/bin/bash
+
+source /opt/sbx/data/sbx.conf
+source /opt/sbx/lib/common.sh
+source /opt/sbx/lib/route.sh
+
+root_check
+route_cli "$@"
