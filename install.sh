@@ -83,8 +83,6 @@ resolve_source() {
         return
     fi
 
-    [ "$repo" != "$DEFAULT_REPO" ] || die \
-        "repository is not configured; set SBX_REPO=OWNER/REPO or use --repo OWNER/REPO"
     [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "invalid GitHub repository: $repo"
     [[ "$ref" =~ ^[A-Za-z0-9._/-]+$ ]] || die "invalid Git ref: $ref"
 
