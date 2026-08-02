@@ -9,13 +9,13 @@ TUN/TProxy routing tools.
 Run as `root`, or pipe the script to `sudo bash`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/driftbottle61/sbx/main/install.sh | sudo bash
+curl -fsSL https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh | sudo bash
 ```
 
 With `wget`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/driftbottle61/sbx/main/install.sh | sudo bash
+wget -qO- https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh | sudo bash
 ```
 
 Then start the manager:
@@ -30,7 +30,7 @@ preserved during an upgrade.
 ## Install a release or fork
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/driftbottle61/sbx/main/install.sh \
+curl -fsSL https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh \
   | sudo bash -s -- --ref v1.2.0
 ```
 
