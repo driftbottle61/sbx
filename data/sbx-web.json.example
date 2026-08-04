@@ -1,0 +1,10 @@
+{
+  "listen": "127.0.0.1",
+  "port": 9096,
+  "token": "请生成一个随机访问令牌",
+  "network_interface": "",
+  "adguard_url": "http://192.168.100.9:3000",
+  "adguard_user": "只读用户名",
+  "adguard_password": "只读密码",
+  "poll_seconds": 2
+}

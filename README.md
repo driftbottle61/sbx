@@ -27,6 +27,14 @@ sudo sbx
 The same install command upgrades SBX. Existing `/opt/sbx/data/sbx.conf` is
 preserved during an upgrade.
 
+## Web 面板
+
+在 `sbx` 主菜单选择 `6. Web 面板`，先执行“安装/更新服务”，再选择“配置面板与 AdGuard”。面板默认监听 `127.0.0.1:9096`；如需从局域网访问，将监听地址改为 `0.0.0.0`，随后菜单会显示带访问令牌的 URL。
+
+面板显示服务器 CPU、内存、磁盘及网卡实时流量。DNS 动态从 AdGuard Home 的 Query Log API 获取，因此能显示真实请求客户端、域名、记录类型和解析结果，而不是只显示 mosdns。请在 AdGuard Home 中创建专门的低权限只读账号并填入其地址、用户名和密码；未配置 AdGuard 时，系统指标仍可使用，DNS 列表为空。
+
+面板配置在 `/etc/sbx-web/config.json`，权限为 `600`，升级不会覆盖。该文件含 AdGuard 密码及访问令牌，严禁提交到 Git。局域网访问时应保留随机令牌，并在 RouterOS 或反向代理侧限制可访问的设备。
+
 ## Install a release or fork
 
 ```bash
@@ -58,6 +66,7 @@ directory under `/var/lib` before removal.
 - `/usr/local/bin/sbx`: command entry point
 - `/etc/sing-box/config.json`: Sing-box configuration
 - `/etc/systemd/system/sing-box.service`: generated systemd service
+- `/etc/sbx-web/config.json`: Web 面板私有配置
 
 ## Supported systems
 

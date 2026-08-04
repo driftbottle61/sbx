@@ -71,7 +71,7 @@ install_dependencies() {
     apt-get update
     apt-get install -y --no-install-recommends \
         bash ca-certificates curl wget jq unzip tar iproute2 iptables nftables \
-        systemd lsb-release net-tools dnsutils iputils-ping
+        systemd lsb-release net-tools dnsutils iputils-ping python3
 }
 
 resolve_source() {
@@ -116,9 +116,11 @@ install_files() {
     mkdir -p "$INSTALL_DIR" "$INSTALL_DIR/backup" "$INSTALL_DIR/log" "$INSTALL_DIR/tmp"
     install -m 0755 "$source_dir/sbx" "$source_dir/sbx-route" \
         "$source_dir/install.sh" "$source_dir/uninstall.sh" "$INSTALL_DIR/"
-    install -d -m 0755 "$INSTALL_DIR/lib" "$INSTALL_DIR/data"
+    install -d -m 0755 "$INSTALL_DIR/lib" "$INSTALL_DIR/data" "$INSTALL_DIR/web"
     install -m 0644 "$source_dir"/lib/*.sh "$INSTALL_DIR/lib/"
     install -m 0644 "$source_dir/data/cn_ip.txt" "$INSTALL_DIR/data/cn_ip.txt"
+    install -m 0644 "$source_dir/data/sbx-web.json.example" "$INSTALL_DIR/data/sbx-web.json.example"
+    install -m 0755 "$source_dir/web/sbx_web.py" "$INSTALL_DIR/web/sbx_web.py"
     install -m 0600 "$source_dir/data/sbx.conf" "$INSTALL_DIR/data/sbx.conf"
 
     if [ -n "$saved_config" ]; then
@@ -133,6 +135,7 @@ install_files() {
 
 verify_installation() {
     bash -n "$INSTALL_DIR/sbx" "$INSTALL_DIR/sbx-route" "$INSTALL_DIR"/lib/*.sh
+    python3 -m py_compile "$INSTALL_DIR/web/sbx_web.py"
     [ -x "$BIN_DIR/sbx" ] || die "command link was not created"
 }
 

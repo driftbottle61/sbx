@@ -10,6 +10,7 @@ source /opt/sbx/lib/config.sh
 source /opt/sbx/lib/route.sh
 source /opt/sbx/lib/tools.sh
 source /opt/sbx/lib/dashboard.sh
+source /opt/sbx/lib/web.sh
 
 root_check
 
@@ -51,6 +52,12 @@ route_menu
 5)
 
 tools_menu
+
+;;
+
+6)
+
+web_menu
 
 ;;
 
