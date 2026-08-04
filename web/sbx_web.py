@@ -105,11 +105,12 @@ def poll_adguard(config):
     for item in reversed(data):
         question = item.get("question") or {}
         answers = item.get("answer") or []
+        client_info = item.get("client_info") or {}
         key = "%s|%s|%s" % (item.get("time", ""), item.get("client", ""), question.get("name", ""))
         if key in last_query_ids:
             continue
-        result = ", ".join(str(answer.get("value", "")) for answer in answers if answer.get("value"))
-        incoming.append({"id": key, "time": item.get("time", ""), "client": item.get("client", ""), "client_name": item.get("client_info", {}).get("name", ""), "domain": question.get("name", ""), "type": question.get("type", ""), "result": result or item.get("reason", "")})
+        result = ", ".join(str(answer.get("value", "")) for answer in answers if isinstance(answer, dict) and answer.get("value"))
+        incoming.append({"id": key, "time": item.get("time", ""), "client": item.get("client", ""), "client_name": client_info.get("name", ""), "domain": question.get("name", ""), "type": question.get("type", ""), "result": result or item.get("reason", "")})
     for item in incoming:
         events.appendleft(item)
         last_query_ids.add(item["id"])
