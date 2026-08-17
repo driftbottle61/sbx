@@ -33,6 +33,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          cat > /tmp/release-notes.md <<EOF
+          ## 一键安装
+
+          使用 root 用户执行：
+
+          \`\`\`bash
+          curl -fsSL https://github.com/driftbottle61/sbx/releases/download/${RELEASE_TAG}/install-oneclick.sh | bash
+          \`\`\`
+
+          本版本会自动检测本机 \`127.0.0.1:8080\` 下载代理，并为 GitHub API、配置及 Sing-box Release 下载统一启用超时和重试。
+          EOF
+
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" \
               dist/sbx-*.tar.gz \
@@ -45,5 +57,9 @@ jobs:
               dist/install-oneclick.sh \
               dist/SHA256SUMS \
               --title "SBX $RELEASE_TAG" \
-              --generate-notes
+              --notes-file /tmp/release-notes.md
           fi
+
+          gh release edit "$RELEASE_TAG" \
+            --title "SBX $RELEASE_TAG" \
+            --notes-file /tmp/release-notes.md
