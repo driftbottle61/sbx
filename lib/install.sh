@@ -74,7 +74,7 @@ download_release() {
 
     echo "$URL"
 
-    wget -O /tmp/sing-box.tar.gz "$URL"
+    sbx_wget -O /tmp/sing-box.tar.gz "$URL"
 
     if [ $? -ne 0 ]; then
         error "下载失败"
@@ -110,7 +110,7 @@ install_latest() {
 
     info "获取最新版本..."
 
-    VERSION=$(curl -s \
+    VERSION=$(sbx_curl -s \
         https://api.github.com/repos/SagerNet/sing-box/releases/latest \
         | jq -r '.tag_name')
 
@@ -179,7 +179,7 @@ show_release_list() {
 
     info "最近20个版本"
 
-    curl -s \
+    sbx_curl -s \
     https://api.github.com/repos/SagerNet/sing-box/releases \
     | jq -r '.[].tag_name' \
     | head -20

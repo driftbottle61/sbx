@@ -100,7 +100,7 @@ if [ -f "$CONFIG_FILE" ];then
 fi
 
 
-curl -L "$CONFIG_URL" -o /tmp/config.json
+sbx_curl "$CONFIG_URL" -o /tmp/config.json
 
 
 if [ $? -ne 0 ];then

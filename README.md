@@ -18,6 +18,12 @@ With `wget`:
 wget -qO- https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh | sudo bash
 ```
 
+Install the fixed `v1.2.1` release as `root`:
+
+```bash
+curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.1/install-oneclick.sh | bash
+```
+
 Then start the manager:
 
 ```bash
@@ -26,6 +32,25 @@ sudo sbx
 
 The same install command upgrades SBX. Existing `/opt/sbx/data/sbx.conf` is
 preserved during an upgrade.
+
+## Download proxy
+
+SBX automatically checks `http://127.0.0.1:8080` when it starts. If the local
+proxy is available, dependency, GitHub API, configuration, and Sing-box release
+downloads use it automatically. If it is unavailable, SBX uses the direct
+connection with bounded timeouts and retries.
+
+Set a different proxy for one run:
+
+```bash
+SBX_DOWNLOAD_PROXY=http://192.168.100.18:8080 sbx
+```
+
+Force direct downloads:
+
+```bash
+SBX_DOWNLOAD_PROXY=off sbx
+```
 
 ## Web 面板
 
@@ -39,7 +64,7 @@ preserved during an upgrade.
 
 ```bash
 curl -fsSL https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh \
-  | sudo bash -s -- --ref v1.2.0
+  | sudo bash -s -- --ref v1.2.1
 ```
 
 ```bash

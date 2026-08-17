@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release assets
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          package="sbx-${version}"
+          mkdir -p "dist/${package}"
+          cp -a LICENSE README.md data install.sh lib sbx sbx-route uninstall.sh web "dist/${package}/"
+          tar -C dist -czf "dist/${package}.tar.gz" "${package}"
+          cp install.sh dist/install-oneclick.sh
+          sed -i "s/readonly DEFAULT_REF=\"main\"/readonly DEFAULT_REF=\"${RELEASE_TAG}\"/" dist/install-oneclick.sh
+          sha256sum "dist/${package}.tar.gz" dist/install-oneclick.sh > dist/SHA256SUMS
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            dist/sbx-*.tar.gz \
+            dist/install-oneclick.sh \
+            dist/SHA256SUMS \
+            --title "SBX $RELEASE_TAG" \
+            --generate-notes

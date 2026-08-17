@@ -4,16 +4,50 @@ set -Eeuo pipefail
 readonly INSTALL_DIR="${SBX_INSTALL_DIR:-/opt/sbx}"
 readonly BIN_DIR="${SBX_BIN_DIR:-/usr/local/bin}"
 readonly DEFAULT_REPO="driftbottle61/sbx"
+readonly DEFAULT_REF="main"
 
 repo="${SBX_REPO:-$DEFAULT_REPO}"
-ref="${SBX_REF:-main}"
+ref="${SBX_REF:-$DEFAULT_REF}"
 skip_deps=0
 source_dir=""
 work_dir=""
 backup_dir=""
+download_proxy_ready=0
 
 log() { printf '[SBX] %s\n' "$*"; }
 die() { printf '[SBX] ERROR: %s\n' "$*" >&2; exit 1; }
+
+setup_download_proxy() {
+    [ "$download_proxy_ready" -eq 0 ] || return 0
+
+    local proxy="${SBX_DOWNLOAD_PROXY:-}"
+    local probe_url="${SBX_PROXY_PROBE_URL:-https://www.gstatic.com/generate_204}"
+
+    if [ "$proxy" = "off" ] || [ "$proxy" = "direct" ]; then
+        unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+        log "Downloads will use direct connections"
+        download_proxy_ready=1
+        return
+    fi
+
+    if [ -z "$proxy" ] && command -v curl >/dev/null 2>&1 \
+        && curl -fsS --proxy "http://127.0.0.1:8080" \
+        --connect-timeout 3 --max-time 6 "$probe_url" >/dev/null 2>&1; then
+        proxy="http://127.0.0.1:8080"
+    fi
+
+    if [ -n "$proxy" ]; then
+        export http_proxy="$proxy" https_proxy="$proxy"
+        export HTTP_PROXY="$proxy" HTTPS_PROXY="$proxy"
+        export no_proxy="${no_proxy:-127.0.0.1,localhost,::1}"
+        export NO_PROXY="$no_proxy"
+        log "Downloads will use proxy: $proxy"
+    else
+        log "No download proxy detected; using direct connections"
+    fi
+
+    download_proxy_ready=1
+}
 
 cleanup() {
     [ -z "$work_dir" ] || rm -rf "$work_dir"
@@ -91,7 +125,9 @@ resolve_source() {
     archive_url="https://github.com/$repo/archive/$ref.tar.gz"
 
     log "Downloading $repo ($ref)"
+    setup_download_proxy
     curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+        --connect-timeout 15 --max-time "${SBX_DOWNLOAD_TIMEOUT:-300}" \
         "$archive_url" --output "$archive"
     mkdir -p "$work_dir/source"
     tar -xzf "$archive" -C "$work_dir/source" --strip-components=1
@@ -100,7 +136,10 @@ resolve_source() {
 }
 
 install_files() {
-    local saved_config=""
+    local saved_config="" project_version
+
+    project_version="$(sed -n 's/^SBX_VERSION="\([^"]*\)"/\1/p' "$source_dir/data/sbx.conf" | head -1)"
+    [ -n "$project_version" ] || die "source package does not define SBX_VERSION"
 
     if [ -f "$INSTALL_DIR/data/sbx.conf" ]; then
         saved_config="$(mktemp /tmp/sbx-config.XXXXXX)"
@@ -125,6 +164,11 @@ install_files() {
 
     if [ -n "$saved_config" ]; then
         install -m 0600 "$saved_config" "$INSTALL_DIR/data/sbx.conf"
+        if grep -q '^SBX_VERSION=' "$INSTALL_DIR/data/sbx.conf"; then
+            sed -i "s/^SBX_VERSION=.*/SBX_VERSION=\"$project_version\"/" "$INSTALL_DIR/data/sbx.conf"
+        else
+            sed -i "1iSBX_VERSION=\"$project_version\"" "$INSTALL_DIR/data/sbx.conf"
+        fi
         rm -f "$saved_config"
         log "Preserved existing configuration"
     fi
@@ -143,6 +187,7 @@ main() {
     parse_args "$@"
     require_root
     check_system
+    setup_download_proxy
     install_dependencies
     resolve_source
     install_files
