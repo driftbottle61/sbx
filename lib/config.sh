@@ -208,6 +208,24 @@ fi
 pause
 
 }
+
+set_dual_config_urls(){
+    load_config
+    echo
+    echo "设置 TProxy/TUN 双配置地址"
+    read -r -p "TProxy 配置 URL [${CONFIG_URL_TPROXY:-未设置}]：" tproxy_url
+    read -r -p "TUN 配置 URL [${CONFIG_URL_TUN:-未设置}]：" tun_url
+    [ -n "$tproxy_url" ] || tproxy_url="${CONFIG_URL_TPROXY:-}"
+    [ -n "$tun_url" ] || tun_url="${CONFIG_URL_TUN:-}"
+    if [ -z "$tproxy_url" ] || [ -z "$tun_url" ]; then
+        warn "两条配置 URL 都不能为空"
+        pause
+        return
+    fi
+    set_config_urls "$tproxy_url" "$tun_url"
+    select_config_url_for_mode
+    update_config
+}
 config_menu(){
 
 while true
@@ -228,6 +246,8 @@ cat <<EOF
 3. 更新配置
 
 4. 检查配置
+
+5. 设置 TProxy/TUN 双配置地址
 
 0. 返回
 
@@ -260,6 +280,12 @@ update_config
 4)
 
 check_config
+
+;;
+
+5)
+
+set_dual_config_urls
 
 ;;
 
