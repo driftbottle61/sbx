@@ -267,6 +267,6 @@ refresh_dashboard_metrics(){
     [ -n "$mem_use" ] || mem_use=0
 
     # Save the input cursor, update fixed-width fields, then restore it.
-    printf '\0337\033[30;18H%10.1f\033[31;18H%10.1f\0338' \
+    printf '\0337\033[29;18H%10.1f\033[30;18H%10.1f\0338' \
         "$cpu_use" "$mem_use"
 }
