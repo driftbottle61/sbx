@@ -102,6 +102,8 @@ install_binary() {
 }
 
 install_latest() {
+    local fresh_install=0
+    [ -x "$SINGBOX_BIN" ] || fresh_install=1
     check_system || return
     install_dependencies
     create_directory
@@ -129,17 +131,20 @@ install_latest() {
     }
 
     install_binary
-
-    create_service
-
-    if command -v configure_route_mode_after_install >/dev/null 2>&1; then
-        configure_route_mode_after_install
+    if [ "$fresh_install" -eq 1 ]; then
+        first_install_setup
+    else
+        create_service
+        prepare_singbox_route_config
+        restart_service
+        ok "Sing-box 已覆盖更新并重启"
+        pause
     fi
-
-    pause
 }
 
 install_custom() {
+    local fresh_install=0
+    [ -x "$SINGBOX_BIN" ] || fresh_install=1
     check_system || return
     install_dependencies
     create_directory
@@ -160,17 +165,58 @@ install_custom() {
     }
 
     install_binary
-    create_service
+    if [ "$fresh_install" -eq 1 ]; then
+        first_install_setup
+    else
+        create_service
+        prepare_singbox_route_config
+        restart_service
+        ok "Sing-box 已覆盖更新并重启"
+        pause
+    fi
+}
+
+# Complete the interactive first-install flow. Upgrades do not enter this
+# function, so existing subscriptions and service settings remain untouched.
+first_install_setup(){
+    local enable_boot=""
+
+    echo
+    echo "首次安装向导"
+    read -r -p "是否设置 sing-box 开机自动启动？[Y/n]：" enable_boot
+    case "${enable_boot,,}" in
+        n|no)
+            info "稍后可在服务管理中启用开机启动"
+            ;;
+        *)
+            enable_boot="yes"
+            ;;
+    esac
 
     if command -v configure_route_mode_after_install >/dev/null 2>&1; then
         configure_route_mode_after_install
     fi
 
-    enable_service
+    # Route preparation must happen before the unit is generated.
+    create_service
 
+    echo
+    read -r -p "请输入订阅配置 URL（直接回车跳过）：" subscription_url
+    if [ -n "$subscription_url" ]; then
+        load_config
+        CONFIG_URL="$subscription_url"
+        # Reuse the normal config writer so all required local settings remain.
+        set_config_url_value "$subscription_url"
+        update_config
+    else
+        warn "未设置订阅 URL，稍后可在配置管理中设置并更新"
+    fi
+
+    if [ "$enable_boot" = "yes" ]; then
+        enable_service
+    fi
     restart_service
-
-    pause
+    ok "首次安装配置完成，正在进入 SBX 状态面板"
 }
 
 show_release_list() {

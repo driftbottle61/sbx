@@ -11,9 +11,11 @@ load_config(){
     fi
 
 }
-set_config_url(){
-
+set_config_url_value(){
+local URL="$1"
 load_config
+
+[ -n "$URL" ] || return 1
 
 clear
 
@@ -22,18 +24,6 @@ echo "==============="
 echo "设置配置地址"
 echo "==============="
 echo
-
-read -p "请输入配置URL：" URL
-
-if [ -z "$URL" ];then
-
-    warn "不能为空"
-
-    pause
-
-    return
-
-fi
 
 [ -z "$ROUTE_MODE" ] && ROUTE_MODE="tproxy"
 
@@ -51,6 +41,30 @@ ROUTE_MODE="${ROUTE_MODE}"
 EOF
 
 ok "配置保存成功"
+
+}
+
+set_config_url(){
+
+load_config
+
+clear
+
+echo
+echo "==============="
+echo "设置配置地址"
+echo "==============="
+echo
+
+read -r -p "请输入配置URL：" URL
+
+if [ -z "$URL" ];then
+warn "不能为空"
+pause
+return
+fi
+
+set_config_url_value "$URL"
 
 pause
 
