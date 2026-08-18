@@ -552,11 +552,14 @@ route_cli(){
         prepare-config)
             prepare_singbox_route_config
             ;;
+        sync-dns)
+            sync_resolved_for_route_mode "$ROUTE_MODE"
+            ;;
         status)
             show_route_status
             ;;
         *)
-            echo "Usage: sbx-route [start|stop|restart|prepare-config|status]"
+            echo "Usage: sbx-route [start|stop|restart|prepare-config|sync-dns|status]"
             return 1
             ;;
     esac

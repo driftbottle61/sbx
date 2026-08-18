@@ -36,6 +36,9 @@ ExecStart=$SINGBOX_BIN run -c $CONFIG_FILE
 
 ExecStartPost=-/opt/sbx/sbx-route start
 
+# sing-box creates utun during startup; synchronize resolved after it exists.
+ExecStartPost=-/opt/sbx/sbx-route sync-dns
+
 ExecStopPost=-/opt/sbx/sbx-route stop
 
 Restart=on-failure

@@ -175,6 +175,20 @@ install_files() {
 
     ln -sfn "$INSTALL_DIR/sbx" "$BIN_DIR/sbx"
     ln -sfn "$INSTALL_DIR/sbx-route" "$BIN_DIR/sbx-route"
+
+    # Refresh the unit on upgrades so post-start route/DNS hooks are installed
+    # without requiring the user to recreate the service manually.
+    if systemctl cat sing-box.service >/dev/null 2>&1 && [ -f "$INSTALL_DIR/lib/service.sh" ]; then
+        # shellcheck disable=SC1091
+        source "$INSTALL_DIR/lib/common.sh"
+        # shellcheck disable=SC1091
+        source "$INSTALL_DIR/lib/config.sh"
+        # shellcheck disable=SC1091
+        source "$INSTALL_DIR/lib/system.sh"
+        # shellcheck disable=SC1091
+        source "$INSTALL_DIR/lib/service.sh"
+        create_service
+    fi
 }
 
 verify_installation() {
