@@ -260,8 +260,27 @@ DASHBOARD_DRAWN=1
 # Update only the two numeric fields in the already rendered dashboard.
 # Rows are zero-based and match the fixed dashboard layout above.
 refresh_dashboard_metrics(){
-    local cpu_use mem_use
-    cpu_use=$(ps -C sing-box -o %cpu= | awk '{sum+=$1} END{printf "%.1f",sum}')
+    local cpu_use mem_use pid proc_ticks total_ticks delta_proc delta_total cores
+    pid=$(pidof sing-box 2>/dev/null | awk '{print $1}')
+
+    cpu_use=0
+    if [ -n "$pid" ] && [ -r "/proc/$pid/stat" ]; then
+        proc_ticks=$(awk '{print $14 + $15}' "/proc/$pid/stat" 2>/dev/null)
+        total_ticks=$(awk '/^cpu / {sum=0; for(i=2;i<=NF;i++) sum+=$i; print sum; exit}' /proc/stat)
+        if [ -n "${DASHBOARD_PREV_PROC_TICKS:-}" ] && \
+           [ -n "${DASHBOARD_PREV_TOTAL_TICKS:-}" ]; then
+            delta_proc=$((proc_ticks - DASHBOARD_PREV_PROC_TICKS))
+            delta_total=$((total_ticks - DASHBOARD_PREV_TOTAL_TICKS))
+            cores=$(nproc)
+            if [ "$delta_total" -gt 0 ]; then
+                cpu_use=$(awk -v p="$delta_proc" -v t="$delta_total" -v c="$cores" \
+                    'BEGIN {printf "%.1f", p * c * 100 / t}')
+            fi
+        fi
+        DASHBOARD_PREV_PROC_TICKS="$proc_ticks"
+        DASHBOARD_PREV_TOTAL_TICKS="$total_ticks"
+    fi
+
     mem_use=$(ps -C sing-box -o rss= | awk '{sum+=$1} END{printf "%.1f",sum/1024}')
     [ -n "$cpu_use" ] || cpu_use=0
     [ -n "$mem_use" ] || mem_use=0
