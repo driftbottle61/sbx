@@ -227,6 +227,11 @@ write_systemd_network_config(){
 
     mkdir -p /etc/systemd/network
 
+    # Remove stale SBX-generated profiles for the same interface so networkd
+    # cannot keep applying an older address alongside the new one.
+    find /etc/systemd/network -maxdepth 1 -type f \
+        -name '10-sbx-*.network' ! -name "10-sbx-$iface.network" -delete 2>/dev/null || true
+
     cat > "$file" <<EOF
 [Match]
 Name=$iface
@@ -267,15 +272,21 @@ EOF
 }
 
 apply_network_config(){
-    local backend
+    local backend iface
     backend="$1"
+    iface="$2"
 
     case "$backend" in
         netplan)
             netplan generate && netplan apply
             ;;
         systemd-networkd)
+            # Flush runtime addresses before networkd reconfigures the link;
+            # otherwise the old static address can survive the restart.
+            [ -n "$iface" ] && ip -4 addr flush dev "$iface" scope global 2>/dev/null || true
+            networkctl reload 2>/dev/null || true
             systemctl restart systemd-networkd
+            [ -n "$iface" ] && networkctl reconfigure "$iface" 2>/dev/null || true
             ;;
         ifupdown)
             if command -v ifreload >/dev/null 2>&1; then
@@ -324,7 +335,7 @@ save_network_config(){
             ;;
     esac
 
-    apply_network_config "$backend"
+    apply_network_config "$backend" "$iface"
 }
 
 confirm_apply_network(){
