@@ -183,7 +183,14 @@ fi
 
 #########################
 
-clear
+# Avoid full-screen clear on periodic refreshes. Repositioning the cursor
+# keeps the dashboard stable and prevents the visible blink caused by `clear`.
+if [ "${DASHBOARD_DRAWN:-0}" = "1" ]; then
+    printf '\033[H'
+else
+    clear
+    DASHBOARD_DRAWN=1
+fi
 
 cat <<EOF
 
