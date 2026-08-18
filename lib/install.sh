@@ -183,17 +183,6 @@ first_install_setup(){
 
     echo
     echo "首次安装向导"
-    read -r -p "是否设置 sing-box 开机自动启动？[Y/n]：" enable_boot
-    case "${enable_boot,,}" in
-        n|no)
-            info "稍后可在服务管理中启用开机启动"
-            ;;
-        *)
-            enable_boot="yes"
-            ;;
-    esac
-
-    echo
     read -r -p "请输入 TProxy 配置 URL：" tproxy_url
     read -r -p "请输入 TUN 配置 URL：" tun_url
     if [ -z "$tproxy_url" ] || [ -z "$tun_url" ]; then
@@ -205,6 +194,12 @@ first_install_setup(){
     if command -v configure_route_mode_after_install >/dev/null 2>&1; then
         configure_route_mode_after_install
     fi
+
+    read -r -p "是否设置 sing-box 开机自动启动？[Y/n]：" enable_boot
+    case "${enable_boot,,}" in
+        n|no) info "稍后可在服务管理中启用开机启动" ;;
+        *) enable_boot="yes" ;;
+    esac
 
     # Route preparation must happen before the unit is generated.
     create_service
