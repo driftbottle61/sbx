@@ -215,10 +215,13 @@ sync_resolved_for_route_mode(){
 
     case "$mode" in
         tun|TUN)
-            [ -n "$lan_if" ] && resolvectl revert "$lan_if" >/dev/null 2>&1 || true
-            if ip link show utun >/dev/null 2>&1; then
-                resolvectl dns utun 172.19.0.2 >/dev/null 2>&1 || true
-                resolvectl domain utun '~.' >/dev/null 2>&1 || true
+            # Do not force the system resolver through 172.19.0.2. In an
+            # unprivileged LXC the TUN DNS endpoint may be unavailable; keep
+            # DNS on the LAN resolver while sing-box handles proxied traffic.
+            resolvectl revert utun >/dev/null 2>&1 || true
+            if [ -n "$lan_if" ] && [ -n "$lan_dns" ]; then
+                resolvectl dns "$lan_if" $lan_dns >/dev/null 2>&1 || true
+                resolvectl domain "$lan_if" '~.' >/dev/null 2>&1 || true
             fi
             ;;
         tproxy|TProxy|TPROXY|off|OFF|none)
