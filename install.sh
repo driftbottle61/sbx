@@ -179,10 +179,12 @@ install_files() {
     # Refresh the unit on upgrades so post-start route/DNS hooks are installed
     # without requiring the user to recreate the service manually.
     if systemctl cat sing-box.service >/dev/null 2>&1 && [ -f "$INSTALL_DIR/lib/service.sh" ]; then
+        # The service template relies on paths kept in the preserved config.
+        # Load values before sourcing/calling the service helpers under set -u.
+        # shellcheck disable=SC1091
+        source "$INSTALL_DIR/data/sbx.conf"
         # shellcheck disable=SC1091
         source "$INSTALL_DIR/lib/common.sh"
-        # shellcheck disable=SC1091
-        source "$INSTALL_DIR/lib/config.sh"
         # shellcheck disable=SC1091
         source "$INSTALL_DIR/lib/system.sh"
         # shellcheck disable=SC1091
