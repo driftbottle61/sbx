@@ -26,8 +26,11 @@ CHOICE=""
 # A timeout keeps the displayed CPU/memory values live without changing the
 # existing menu semantics.
 if ! read -r -t 2 -p "请选择：" CHOICE; then
+    refresh_dashboard_metrics
     continue
 fi
+
+DASHBOARD_DRAWN=0
 
 
 case "$CHOICE" in

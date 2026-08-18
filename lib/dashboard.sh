@@ -2,6 +2,8 @@
 
 dashboard() {
 
+[ "${DASHBOARD_DRAWN:-0}" = "1" ] && return 0
+
 if command -v load_config >/dev/null 2>&1; then
     load_config
 fi
@@ -183,16 +185,10 @@ fi
 
 #########################
 
-# Avoid full-screen clear on periodic refreshes. Repositioning the cursor
-# keeps the dashboard stable and prevents the visible blink caused by `clear`.
-if [ "${DASHBOARD_DRAWN:-0}" = "1" ]; then
-    # Clear from the cursor to the end, including a timed-out menu prompt,
-    # without the terminal-wide flash caused by the clear command.
-    printf '\033[H\033[J'
-else
-    clear
-    DASHBOARD_DRAWN=1
-fi
+clear
+
+CPU_DISPLAY=$(printf '%10.1f' "$CPU_USE")
+MEM_DISPLAY=$(printf '%10.1f' "$MEM_USE")
 
 cat <<EOF
 
@@ -224,8 +220,8 @@ cat <<EOF
  配置文件      : ${CONFIG_FILE}
  路由模式      : ${ROUTE_MODE}
 
- CPU占用       : ${CPU_USE} %
- 内存占用      : ${MEM_USE} MB
+ CPU占用       : ${CPU_DISPLAY} %
+ 内存占用      : ${MEM_DISPLAY} MB
 
  网络状态      : ${NETWORK}
  TUN           : ${TUN_STATUS}
@@ -257,4 +253,20 @@ cat <<EOF
 
 EOF
 
+DASHBOARD_DRAWN=1
+
+}
+
+# Update only the two numeric fields in the already rendered dashboard.
+# Rows are zero-based and match the fixed dashboard layout above.
+refresh_dashboard_metrics(){
+    local cpu_use mem_use
+    cpu_use=$(ps -C sing-box -o %cpu= | awk '{sum+=$1} END{printf "%.1f",sum}')
+    mem_use=$(ps -C sing-box -o rss= | awk '{sum+=$1} END{printf "%.1f",sum/1024}')
+    [ -n "$cpu_use" ] || cpu_use=0
+    [ -n "$mem_use" ] || mem_use=0
+
+    # Save the input cursor, update fixed-width fields, then restore it.
+    printf '\0337\033[30;18H%10.1f\033[31;18H%10.1f\0338' \
+        "$cpu_use" "$mem_use"
 }
