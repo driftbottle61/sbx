@@ -21,7 +21,13 @@ do
 
 dashboard
 
-read -p "请选择：" CHOICE
+CHOICE=""
+# Refresh the terminal dashboard periodically while waiting for input.
+# A timeout keeps the displayed CPU/memory values live without changing the
+# existing menu semantics.
+if ! read -r -t 2 -p "请选择：" CHOICE; then
+    continue
+fi
 
 
 case "$CHOICE" in
