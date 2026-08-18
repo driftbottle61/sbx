@@ -186,7 +186,9 @@ fi
 # Avoid full-screen clear on periodic refreshes. Repositioning the cursor
 # keeps the dashboard stable and prevents the visible blink caused by `clear`.
 if [ "${DASHBOARD_DRAWN:-0}" = "1" ]; then
-    printf '\033[H'
+    # Clear from the cursor to the end, including a timed-out menu prompt,
+    # without the terminal-wide flash caused by the clear command.
+    printf '\033[H\033[J'
 else
     clear
     DASHBOARD_DRAWN=1
