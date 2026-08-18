@@ -113,6 +113,11 @@ update_config(){
 
 load_config
 
+if [ -n "${CONFIG_URL_TPROXY:-}" ] || [ -n "${CONFIG_URL_TUN:-}" ]; then
+    select_config_url_for_mode
+    load_config
+fi
+
 if [ -z "$CONFIG_URL" ];then
 
     warn "请先设置配置地址"
