@@ -4,12 +4,28 @@ readonly SBX_WEB_SERVICE="sbx-web.service"
 readonly SBX_WEB_CONFIG="/etc/sbx-web/config.json"
 readonly SBX_WEB_DEFAULT_CONFIG="/opt/sbx/data/sbx-web.json.example"
 
+ensure_web_token() {
+    local token
+    [ -f "$SBX_WEB_CONFIG" ] || return 1
+    token=$(jq -r '.token // ""' "$SBX_WEB_CONFIG" 2>/dev/null)
+    case "$token" in
+        ""|null|"请生成一个随机访问令牌"|"生成随机令牌")
+            token=$(openssl rand -hex 24 2>/dev/null || tr -dc A-Za-z0-9 </dev/urandom | head -c 48)
+            jq --arg token "$token" '.token=$token' "$SBX_WEB_CONFIG" > "$SBX_WEB_CONFIG.tmp" && \
+                mv "$SBX_WEB_CONFIG.tmp" "$SBX_WEB_CONFIG"
+            chmod 600 "$SBX_WEB_CONFIG"
+            ok "已自动生成 Web 面板访问令牌"
+            ;;
+    esac
+}
+
 web_install() {
     mkdir -p /etc/sbx-web
     if [ ! -f "$SBX_WEB_CONFIG" ]; then
         cp "$SBX_WEB_DEFAULT_CONFIG" "$SBX_WEB_CONFIG"
         chmod 600 "$SBX_WEB_CONFIG"
     fi
+    ensure_web_token
     cat > /etc/systemd/system/$SBX_WEB_SERVICE <<'EOF'
 [Unit]
 Description=SBX Web Monitor
@@ -45,7 +61,9 @@ web_configure() {
     read -r -p "AdGuard 地址（留空不显示 DNS）[$adguard_url]：" input; adguard_url=${input:-$adguard_url}
     read -r -p "AdGuard 只读用户名 [$adguard_user]：" input; adguard_user=${input:-$adguard_user}
     read -r -s -p "AdGuard 密码（留空保持不变）：" adguard_password; echo
-    if [ -z "$token" ]; then token=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 32); fi
+    if [ -z "$token" ] || [ "$token" = "请生成一个随机访问令牌" ]; then
+        token=$(openssl rand -hex 24 2>/dev/null || tr -dc A-Za-z0-9 </dev/urandom | head -c 48)
+    fi
     read -r -p "访问令牌 [$token]：" input; token=${input:-$token}
     [ -z "$adguard_password" ] || current_password=$adguard_password
     jq --arg listen "$listen" --argjson port "$port" --arg iface "$iface" --arg url "$adguard_url" --arg user "$adguard_user" --arg password "$current_password" --arg token "$token" \
