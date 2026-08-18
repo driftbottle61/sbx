@@ -34,6 +34,8 @@ CONFIG_DIR="${CONFIG_DIR}"
 CONFIG_FILE="${CONFIG_FILE}"
 CONFIG_BACKUP="${CONFIG_BACKUP}"
 CONFIG_URL="${URL}"
+CONFIG_URL_TPROXY="${CONFIG_URL_TPROXY:-}"
+CONFIG_URL_TUN="${CONFIG_URL_TUN:-}"
 SINGBOX_BIN="${SINGBOX_BIN}"
 SERVICE_NAME="${SERVICE_NAME}"
 SERVICE_FILE="${SERVICE_FILE}"
@@ -42,6 +44,25 @@ EOF
 
 ok "配置保存成功"
 
+}
+
+set_config_urls(){
+    local tproxy_url="$1" tun_url="$2"
+    load_config
+    CONFIG_URL_TPROXY="$tproxy_url"
+    CONFIG_URL_TUN="$tun_url"
+    if [ "$ROUTE_MODE" = "tun" ]; then CONFIG_URL="$tun_url"; else CONFIG_URL="$tproxy_url"; fi
+    set_config_url_value "$CONFIG_URL"
+}
+
+select_config_url_for_mode(){
+    load_config
+    if [ "$ROUTE_MODE" = "tun" ] && [ -n "${CONFIG_URL_TUN:-}" ]; then
+        CONFIG_URL="$CONFIG_URL_TUN"
+    elif [ "$ROUTE_MODE" != "tun" ] && [ -n "${CONFIG_URL_TPROXY:-}" ]; then
+        CONFIG_URL="$CONFIG_URL_TPROXY"
+    fi
+    set_config_url_value "$CONFIG_URL"
 }
 
 set_config_url(){

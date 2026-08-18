@@ -179,7 +179,7 @@ install_custom() {
 # Complete the interactive first-install flow. Upgrades do not enter this
 # function, so existing subscriptions and service settings remain untouched.
 first_install_setup(){
-    local enable_boot=""
+    local enable_boot="" tproxy_url tun_url
 
     echo
     echo "首次安装向导"
@@ -193,6 +193,15 @@ first_install_setup(){
             ;;
     esac
 
+    echo
+    read -r -p "请输入 TProxy 配置 URL：" tproxy_url
+    read -r -p "请输入 TUN 配置 URL：" tun_url
+    if [ -z "$tproxy_url" ] || [ -z "$tun_url" ]; then
+        warn "两条配置 URL 都不能为空"
+        return 1
+    fi
+    set_config_urls "$tproxy_url" "$tun_url"
+
     if command -v configure_route_mode_after_install >/dev/null 2>&1; then
         configure_route_mode_after_install
     fi
@@ -200,17 +209,7 @@ first_install_setup(){
     # Route preparation must happen before the unit is generated.
     create_service
 
-    echo
-    read -r -p "请输入订阅配置 URL（直接回车跳过）：" subscription_url
-    if [ -n "$subscription_url" ]; then
-        load_config
-        CONFIG_URL="$subscription_url"
-        # Reuse the normal config writer so all required local settings remain.
-        set_config_url_value "$subscription_url"
-        update_config
-    else
-        warn "未设置订阅 URL，稍后可在配置管理中设置并更新"
-    fi
+    update_config
 
     if [ "$enable_boot" = "yes" ]; then
         enable_service

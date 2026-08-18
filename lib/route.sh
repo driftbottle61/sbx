@@ -450,6 +450,10 @@ EOF
 
 set_route_mode(){
     if choose_route_mode "yes"; then
+        if command -v select_config_url_for_mode >/dev/null 2>&1; then
+            select_config_url_for_mode
+            update_config
+        fi
         sync_resolved_for_route_mode "$ROUTE_MODE"
         info "正在重启 Sing-box，并重新应用路由规则..."
         if systemctl restart sing-box; then
@@ -466,6 +470,11 @@ configure_route_mode_after_install(){
 
     if command -v prepare_singbox_route_config >/dev/null 2>&1; then
         prepare_singbox_route_config
+    fi
+
+    if command -v select_config_url_for_mode >/dev/null 2>&1; then
+        select_config_url_for_mode
+        update_config
     fi
 
     sync_resolved_for_route_mode "$ROUTE_MODE"
