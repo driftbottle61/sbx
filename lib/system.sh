@@ -195,6 +195,43 @@ show_dns(){
 
 }
 
+# Keep systemd-resolved aligned with the selected sing-box route mode.
+# TUN publishes a DNS link on utun; TProxy must never leave that link as the
+# default DNS route, otherwise local applications keep querying the old TUN
+# endpoint after a mode switch.
+sync_resolved_for_route_mode(){
+    local mode="${1:-$ROUTE_MODE}" lan_if lan_dns
+
+    command -v resolvectl >/dev/null 2>&1 || return 0
+    lan_if="$(ip route show default 2>/dev/null | awk 'NR==1 {print $5}')"
+    [ -z "$lan_if" ] && lan_if="$(ip -o -4 addr show scope global 2>/dev/null | awk '$2 !~ /utun|docker|veth/ {print $2; exit}')"
+
+    # Capture the configured LAN DNS before reverting the link. If none is
+    # available, use the LAN gateway as a conservative local resolver.
+    lan_dns="$(resolvectl dns "$lan_if" 2>/dev/null | sed -n 's/.*: //p' | awk '{print $1}')"
+    if [ -z "$lan_dns" ]; then
+        lan_dns="$(ip route show default 2>/dev/null | awk 'NR==1 {print $3}')"
+    fi
+
+    case "$mode" in
+        tun|TUN)
+            [ -n "$lan_if" ] && resolvectl revert "$lan_if" >/dev/null 2>&1 || true
+            if ip link show utun >/dev/null 2>&1; then
+                resolvectl dns utun 172.19.0.2 >/dev/null 2>&1 || true
+                resolvectl domain utun '~.' >/dev/null 2>&1 || true
+            fi
+            ;;
+        tproxy|TProxy|TPROXY|off|OFF|none)
+            resolvectl revert utun >/dev/null 2>&1 || true
+            if [ -n "$lan_if" ] && [ -n "$lan_dns" ]; then
+                resolvectl dns "$lan_if" $lan_dns >/dev/null 2>&1 || true
+                resolvectl domain "$lan_if" '~.' >/dev/null 2>&1 || true
+            fi
+            ;;
+    esac
+    systemctl restart systemd-resolved >/dev/null 2>&1 || true
+}
+
 ########################################
 # 查看路由
 ########################################

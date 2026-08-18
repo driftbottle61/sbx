@@ -450,7 +450,13 @@ EOF
 
 set_route_mode(){
     if choose_route_mode "yes"; then
-        warn "已运行的路由规则不会自动变更，请手动应用路由规则或重启 Sing-box 后生效"
+        sync_resolved_for_route_mode "$ROUTE_MODE"
+        info "正在重启 Sing-box，并重新应用路由规则..."
+        if systemctl restart sing-box; then
+            ok "路由模式、DNS 和 Sing-box 已同步生效：$ROUTE_MODE"
+        else
+            error "Sing-box 重启失败，请执行：journalctl -u sing-box -n 50 --no-pager"
+        fi
     fi
     pause
 }
@@ -461,6 +467,8 @@ configure_route_mode_after_install(){
     if command -v prepare_singbox_route_config >/dev/null 2>&1; then
         prepare_singbox_route_config
     fi
+
+    sync_resolved_for_route_mode "$ROUTE_MODE"
 
     info "Sing-box 服务启动时会按 $ROUTE_MODE 应用对应路由和防火墙规则"
     pause
