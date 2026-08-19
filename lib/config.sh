@@ -102,12 +102,33 @@ echo
 
 load_config
 
-echo "$CONFIG_URL"
+echo "TProxy 配置 URL：${CONFIG_URL_TPROXY:-未设置}"
+echo "TUN 配置 URL    ：${CONFIG_URL_TUN:-未设置}"
+echo "当前路由模式    ：${ROUTE_MODE:-未设置}"
+echo "当前使用 URL    ：${CONFIG_URL:-未设置}"
 
 echo
 
 pause
 
+}
+
+show_active_config_context(){
+    load_config
+    if [ "$ROUTE_MODE" = "tun" ]; then
+        mode_label="TUN"
+    else
+        mode_label="TProxy"
+    fi
+    if [ -n "${CONFIG_URL_TPROXY:-}" ] || [ -n "${CONFIG_URL_TUN:-}" ]; then
+        select_config_url_for_mode
+        load_config
+    fi
+    echo
+    echo "当前配置模式：$mode_label"
+    echo "当前配置地址：${CONFIG_URL:-未设置}"
+    echo "配置文件路径：${CONFIG_FILE:-/etc/sing-box/config.json}"
+    echo
 }
 update_config(){
 
@@ -117,6 +138,7 @@ if [ -n "${CONFIG_URL_TPROXY:-}" ] || [ -n "${CONFIG_URL_TUN:-}" ]; then
     select_config_url_for_mode
     load_config
 fi
+show_active_config_context
 
 if [ -z "$CONFIG_URL" ];then
 
@@ -195,6 +217,13 @@ pause
 
 }
 check_config(){
+
+load_config
+if [ -n "${CONFIG_URL_TPROXY:-}" ] || [ -n "${CONFIG_URL_TUN:-}" ]; then
+    select_config_url_for_mode
+    load_config
+fi
+show_active_config_context
 
 if [ ! -f "$CONFIG_FILE" ];then
 
