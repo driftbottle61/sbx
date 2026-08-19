@@ -323,6 +323,14 @@ apply_network_config(){
                 ip addr add "$ip_cidr" dev "$iface"
                 [ -n "$gateway" ] && ip route replace default via "$gateway" dev "$iface"
             fi
+            # ifupdown may leave the previous address as a secondary address;
+            # enforce the requested single IPv4 address after reconfiguration.
+            ip -4 addr flush dev "$iface" scope global 2>/dev/null || true
+            ip -4 addr add "$ip_cidr" dev "$iface" 2>/dev/null || true
+            if [ -n "$gateway" ]; then
+                ip route del default dev "$iface" 2>/dev/null || true
+                ip route replace default via "$gateway" dev "$iface" 2>/dev/null || true
+            fi
             ;;
         resolv.conf)
             if command -v resolvectl >/dev/null 2>&1; then
