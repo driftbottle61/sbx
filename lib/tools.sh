@@ -385,6 +385,19 @@ save_network_config(){
     esac
 
     apply_network_config "$backend" "$iface"
+    local apply_status=$?
+
+    # Debian 13 may have no resolver manager after dhcpcd is disabled. In that
+    # case ifupdown's dns-nameservers directive has no consumer, so explicitly
+    # maintain resolv.conf from the DNS values entered by the user.
+    if [ -n "$dns" ] && \
+       ! command -v resolvconf >/dev/null 2>&1 && \
+       ! command -v openresolv >/dev/null 2>&1 && \
+       ! systemctl is-active --quiet systemd-resolved 2>/dev/null; then
+        write_resolv_conf "$dns"
+    fi
+
+    return "$apply_status"
 }
 
 confirm_apply_network(){
