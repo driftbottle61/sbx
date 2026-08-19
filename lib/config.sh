@@ -244,15 +244,13 @@ cat <<EOF
         配置管理
 ==============================
 
-1. 设置配置地址
+1. 设置 TProxy/TUN 双配置地址
 
 2. 查看配置地址
 
 3. 更新配置
 
 4. 检查配置
-
-5. 设置 TProxy/TUN 双配置地址
 
 0. 返回
 
@@ -266,7 +264,7 @@ case "$NUM" in
 
 1)
 
-set_config_url
+set_dual_config_urls
 
 ;;
 
@@ -285,12 +283,6 @@ update_config
 4)
 
 check_config
-
-;;
-
-5)
-
-set_dual_config_urls
 
 ;;
 
