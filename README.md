@@ -93,6 +93,10 @@ directory under `/var/lib` before removal.
 - `/etc/systemd/system/sing-box.service`: generated systemd service
 - `/etc/sbx-web/config.json`: Web 面板私有配置
 
+## PVE CT 模板
+
+当前 SBX CT 的 PVE 创建命令和初始化检查见 [`docs/pve-ct-template.md`](docs/pve-ct-template.md)。
+
 ## Supported systems
 
 - Debian and Ubuntu
