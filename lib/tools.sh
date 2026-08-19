@@ -39,13 +39,21 @@ detect_network_backend(){
         return
     fi
 
-    if systemctl is-active --quiet systemd-networkd 2>/dev/null || systemctl is-enabled --quiet systemd-networkd 2>/dev/null; then
-        echo "systemd-networkd"
+    # Debian/PVE commonly keeps ifupdown as the authoritative backend even
+    # when systemd-networkd happens to be installed or running. Prefer it when
+    # an interface stanza exists, otherwise the IP change is written to a file
+    # that does not control the link.
+    if [ -f /etc/network/interfaces ] && grep -Eq '^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+' /etc/network/interfaces; then
+        echo "ifupdown"
+        return
+    fi
+    if [ -d /etc/network/interfaces.d ] && find /etc/network/interfaces.d -type f -maxdepth 1 -print -exec grep -Eq '^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+' {} \; -print -quit | grep -q .; then
+        echo "ifupdown"
         return
     fi
 
-    if [ -f /etc/network/interfaces ] || [ -d /etc/network/interfaces.d ]; then
-        echo "ifupdown"
+    if systemctl is-active --quiet systemd-networkd 2>/dev/null || systemctl is-enabled --quiet systemd-networkd 2>/dev/null; then
+        echo "systemd-networkd"
         return
     fi
 
@@ -291,8 +299,12 @@ apply_network_config(){
         ifupdown)
             if command -v ifreload >/dev/null 2>&1; then
                 ifreload -a
-            else
+            elif systemctl is-active --quiet networking 2>/dev/null; then
                 systemctl restart networking
+            else
+                ip addr flush dev "$iface" scope global 2>/dev/null || true
+                ip addr add "$ip_cidr" dev "$iface"
+                [ -n "$gateway" ] && ip route replace default via "$gateway" dev "$iface"
             fi
             ;;
         resolv.conf)
