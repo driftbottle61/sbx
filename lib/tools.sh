@@ -353,6 +353,18 @@ save_network_config(){
 
     backup_network_config "$backend"
 
+    # Debian 13 may run dhcpcd independently of ifupdown. When switching to a
+    # static address it will otherwise immediately restore the old DHCP lease.
+    if [ -n "$ip_cidr" ]; then
+        if command -v dhcpcd >/dev/null 2>&1; then
+            dhcpcd -k "$iface" >/dev/null 2>&1 || true
+        fi
+        if systemctl list-unit-files dhcpcd.service >/dev/null 2>&1; then
+            systemctl disable --now dhcpcd.service >/dev/null 2>&1 || true
+        fi
+        pkill -f "dhcpcd: $iface" >/dev/null 2>&1 || true
+    fi
+
     case "$backend" in
         netplan)
             write_netplan_config "$iface" "$ip_cidr" "$gateway" "$dns"
