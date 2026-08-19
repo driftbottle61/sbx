@@ -136,8 +136,14 @@ install_latest() {
     else
         create_service
         prepare_singbox_route_config
+        systemctl daemon-reload
         restart_service
-        ok "Sing-box 已覆盖更新并重启"
+        if systemctl is-active --quiet "$SERVICE_NAME"; then
+            ok "Sing-box 已覆盖更新并重启"
+        else
+            error "Sing-box 覆盖更新后启动失败"
+            journalctl -u "$SERVICE_NAME" -n 50 --no-pager
+        fi
         pause
     fi
 }
@@ -170,8 +176,14 @@ install_custom() {
     else
         create_service
         prepare_singbox_route_config
+        systemctl daemon-reload
         restart_service
-        ok "Sing-box 已覆盖更新并重启"
+        if systemctl is-active --quiet "$SERVICE_NAME"; then
+            ok "Sing-box 已覆盖更新并重启"
+        else
+            error "Sing-box 覆盖更新后启动失败"
+            journalctl -u "$SERVICE_NAME" -n 50 --no-pager
+        fi
         pause
     fi
 }
@@ -208,8 +220,19 @@ first_install_setup(){
 
     if [ "$enable_boot" = "yes" ]; then
         enable_service
+    else
+        disable_service
     fi
+
+    systemctl daemon-reload
     restart_service
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+        ok "Sing-box systemd 服务已启动"
+    else
+        error "Sing-box systemd 服务启动失败"
+        journalctl -u "$SERVICE_NAME" -n 50 --no-pager
+        return 1
+    fi
     ok "首次安装配置完成，正在进入 SBX 状态面板"
 }
 
