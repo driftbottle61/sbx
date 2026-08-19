@@ -264,11 +264,28 @@ write_ifupdown_config(){
     addr="${ip_cidr%/*}"
     prefix="${ip_cidr#*/}"
     netmask="$(cidr_to_netmask "$prefix")"
-    file="/etc/network/interfaces.d/sbx-$iface"
+    if [ -f /etc/network/interfaces ] && grep -Eq "^[[:space:]]*iface[[:space:]]+$iface[[:space:]]+inet[[:space:]]" /etc/network/interfaces; then
+        file="/etc/network/interfaces"
+    else
+        file="/etc/network/interfaces.d/sbx-$iface"
+    fi
 
     mkdir -p /etc/network/interfaces.d
 
-    cat > "$file" <<EOF
+    # Remove stale SBX-generated ifupdown profiles for this interface. Leaving
+    # an older interfaces.d file causes Debian/PVE to load two addresses and
+    # makes the menu appear to have had no effect.
+    find /etc/network/interfaces.d -maxdepth 1 -type f \
+        -name 'sbx-*' ! -name "sbx-$iface" -delete 2>/dev/null || true
+
+    if [ "$file" = "/etc/network/interfaces" ]; then
+        cat > "$file" <<EOF
+auto lo
+iface lo inet loopback
+
+EOF
+    fi
+    cat >> "$file" <<EOF
 auto $iface
 iface $iface inet static
     address $addr
