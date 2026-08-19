@@ -209,9 +209,24 @@ if command -v prepare_singbox_route_config >/dev/null 2>&1; then
 
 fi
 
-systemctl restart sing-box
+if ! systemctl cat "$SERVICE_NAME" >/dev/null 2>&1; then
+    warn "未找到 $SERVICE_NAME，正在创建 systemd 服务..."
+    if ! command -v create_service >/dev/null 2>&1 || ! create_service; then
+        error "systemd 服务创建失败，配置已保存但尚未启动"
+        pause
+        return 1
+    fi
+fi
 
-ok "Sing-box 已重启"
+systemctl daemon-reload
+if systemctl restart "$SERVICE_NAME" && systemctl is-active --quiet "$SERVICE_NAME"; then
+    ok "Sing-box 已重启"
+else
+    error "Sing-box 重启失败，配置已保存但服务未正常运行"
+    journalctl -u "$SERVICE_NAME" -n 50 --no-pager
+    pause
+    return 1
+fi
 
 pause
 
