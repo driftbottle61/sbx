@@ -82,11 +82,27 @@ fi
 if [ -x "$SINGBOX_BIN" ]; then
 
     VERSION=$($SINGBOX_BIN version | head -1 | awk '{print $3}')
+    VERSION="v${VERSION#v}"
 
 else
 
     VERSION="未安装"
 
+fi
+
+# Fetch the latest stable upstream release for comparison.  A dashboard
+# refresh must remain usable when GitHub is unavailable, so this is best effort.
+LATEST_VERSION="未知"
+if command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    # Initialize the configured download proxy silently for the GitHub query.
+    if command -v setup_download_proxy >/dev/null 2>&1; then
+        setup_download_proxy >/dev/null 2>&1 || true
+    fi
+    LATEST_VERSION=$(curl -fsSL --connect-timeout 2 --max-time 4 \
+        https://api.github.com/repos/SagerNet/sing-box/releases/latest 2>/dev/null \
+        | jq -r '.tag_name // empty' 2>/dev/null)
+    [ -n "$LATEST_VERSION" ] || LATEST_VERSION="未知"
+    [ "$LATEST_VERSION" = "未知" ] || LATEST_VERSION="v${LATEST_VERSION#v}"
 fi
 
 #########################
@@ -214,7 +230,8 @@ cat <<EOF
 【Sing-box】
 
  服务状态      : ${STATUS}
- 当前版本      : ${VERSION}
+ 当前版本    : ${VERSION}
+ 最新正式版  : ${LATEST_VERSION}
  开机启动      : ${ENABLE}
  配置状态      : ${CONFIG}
  配置文件      : ${CONFIG_FILE}

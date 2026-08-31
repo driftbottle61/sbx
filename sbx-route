@@ -2,6 +2,7 @@
 
 source /opt/sbx/data/sbx.conf
 source /opt/sbx/lib/common.sh
+source /opt/sbx/lib/system.sh
 source /opt/sbx/lib/route.sh
 
 root_check

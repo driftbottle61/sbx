@@ -13,7 +13,6 @@ source /opt/sbx/lib/dashboard.sh
 source /opt/sbx/lib/web.sh
 
 root_check
-setup_download_proxy
 
 
 while true
