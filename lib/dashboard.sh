@@ -248,8 +248,8 @@ cat <<EOF
 【Sing-box】
 
  服务状态      : ${STATUS}
- 当前版本    : ${VERSION}
- 最新正式版  : ${LATEST_VERSION}
+ 当前版本      : ${VERSION}
+ 最新正式版    : ${LATEST_VERSION}
  开机启动      : ${ENABLE}
  配置状态      : ${CONFIG}
  配置文件      : ${CONFIG_FILE}
