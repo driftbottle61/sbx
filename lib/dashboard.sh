@@ -101,6 +101,15 @@ if command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
     LATEST_VERSION=$(curl -fsSL --connect-timeout 2 --max-time 4 \
         https://api.github.com/repos/SagerNet/sing-box/releases/latest 2>/dev/null \
         | jq -r '.tag_name // empty' 2>/dev/null)
+    # sing-box may still be bringing up the local proxy during startup. Retry
+    # proxy discovery once when the first GitHub request fails.
+    if [ -z "$LATEST_VERSION" ] && command -v setup_download_proxy >/dev/null 2>&1; then
+        unset SBX_DOWNLOAD_PROXY_READY
+        setup_download_proxy >/dev/null 2>&1 || true
+        LATEST_VERSION=$(curl -fsSL --connect-timeout 3 --max-time 6 \
+            https://api.github.com/repos/SagerNet/sing-box/releases/latest 2>/dev/null \
+            | jq -r '.tag_name // empty' 2>/dev/null)
+    fi
     [ -n "$LATEST_VERSION" ] || LATEST_VERSION="未知"
     [ "$LATEST_VERSION" = "未知" ] || LATEST_VERSION="v${LATEST_VERSION#v}"
 fi
