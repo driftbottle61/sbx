@@ -92,8 +92,13 @@ fi
 
 # Fetch the latest stable upstream release for comparison.  A dashboard
 # refresh must remain usable when GitHub is unavailable, so this is best effort.
-LATEST_VERSION="未知"
-if command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+LATEST_VERSION="${SBX_LATEST_VERSION_CACHE:-未知}"
+now_epoch=$(date +%s)
+cache_epoch=${SBX_LATEST_VERSION_CACHE_EPOCH:-0}
+if [ "$LATEST_VERSION" = "未知" ] || [ $((now_epoch - cache_epoch)) -ge 21600 ]; then
+  LATEST_VERSION="未知"
+fi
+if [ "$LATEST_VERSION" = "未知" ] && command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
     # Initialize the configured download proxy silently for the GitHub query.
     if command -v setup_download_proxy >/dev/null 2>&1; then
         setup_download_proxy >/dev/null 2>&1 || true
@@ -112,6 +117,10 @@ if command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
     fi
     [ -n "$LATEST_VERSION" ] || LATEST_VERSION="未知"
     [ "$LATEST_VERSION" = "未知" ] || LATEST_VERSION="v${LATEST_VERSION#v}"
+    if [ "$LATEST_VERSION" != "未知" ]; then
+        SBX_LATEST_VERSION_CACHE="$LATEST_VERSION"
+        SBX_LATEST_VERSION_CACHE_EPOCH="$now_epoch"
+    fi
 fi
 
 #########################
