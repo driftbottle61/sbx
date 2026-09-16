@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 project_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+project_version="$(sed -n 's/^SBX_VERSION="\([^"]*\)"/\1/p' "$project_dir/data/sbx.conf")"
 test_root="$(mktemp -d /tmp/sbx-test.XXXXXX)"
 trap 'rm -rf "$test_root"' EXIT
 
@@ -18,7 +19,7 @@ test "$(stat -c '%a' "$SBX_INSTALL_DIR/data/sbx.conf")" = "600"
 printf 'CONFIG_URL="https://example.invalid/config"\n' > "$SBX_INSTALL_DIR/data/sbx.conf"
 "$project_dir/install.sh" --skip-deps
 grep -q 'example.invalid' "$SBX_INSTALL_DIR/data/sbx.conf"
-grep -q 'SBX_VERSION="1.2.27"' "$SBX_INSTALL_DIR/data/sbx.conf"
+grep -q "SBX_VERSION=\"$project_version\"" "$SBX_INSTALL_DIR/data/sbx.conf"
 
 "$SBX_INSTALL_DIR/uninstall.sh"
 test ! -e "$SBX_INSTALL_DIR"
