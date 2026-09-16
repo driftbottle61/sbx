@@ -52,7 +52,20 @@ set_config_urls(){
     CONFIG_URL_TPROXY="$tproxy_url"
     CONFIG_URL_TUN="$tun_url"
     if [ "$ROUTE_MODE" = "tun" ]; then CONFIG_URL="$tun_url"; else CONFIG_URL="$tproxy_url"; fi
-    set_config_url_value "$CONFIG_URL"
+    cat > "$config_file" <<EOF
+SBX_VERSION="${SBX_VERSION}"
+CONFIG_DIR="${CONFIG_DIR}"
+CONFIG_FILE="${CONFIG_FILE}"
+CONFIG_BACKUP="${CONFIG_BACKUP}"
+CONFIG_URL="${CONFIG_URL}"
+CONFIG_URL_TPROXY="${CONFIG_URL_TPROXY}"
+CONFIG_URL_TUN="${CONFIG_URL_TUN}"
+SINGBOX_BIN="${SINGBOX_BIN}"
+SERVICE_NAME="${SERVICE_NAME}"
+SERVICE_FILE="${SERVICE_FILE}"
+ROUTE_MODE="${ROUTE_MODE}"
+EOF
+    ok "配置保存成功"
 }
 
 select_config_url_for_mode(){
