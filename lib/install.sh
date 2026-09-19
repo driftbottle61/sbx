@@ -151,6 +151,9 @@ install_latest() {
 update_sbx() {
     local current_version="${SBX_VERSION:-未知}" latest_version="${SBX_LATEST_VERSION:-未知}" installer
 
+    [ "$current_version" = "未知" ] || current_version="v${current_version#v}"
+    [ "$latest_version" = "未知" ] || latest_version="v${latest_version#v}"
+
     if [ "$latest_version" = "未知" ]; then
         warn "无法获取 SBX 最新版本，请检查网络连接"
         pause

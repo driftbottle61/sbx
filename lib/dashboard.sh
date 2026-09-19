@@ -100,6 +100,7 @@ if [ "$LATEST_VERSION" = "未知" ] || [ $((now_epoch - cache_epoch)) -ge 21600 
 fi
 
 SBX_CURRENT_VERSION="${SBX_VERSION:-未知}"
+[ "$SBX_CURRENT_VERSION" = "未知" ] || SBX_CURRENT_VERSION="v${SBX_CURRENT_VERSION#v}"
 SBX_LATEST_VERSION="${SBX_LATEST_VERSION_CACHE:-未知}"
 sbx_latest_cache_epoch=${SBX_LATEST_VERSION_CACHE_EPOCH:-0}
 if [ "$SBX_LATEST_VERSION" = "未知" ] || [ $((now_epoch - sbx_latest_cache_epoch)) -ge 21600 ]; then
