@@ -148,6 +148,41 @@ install_latest() {
     fi
 }
 
+update_sbx() {
+    local current_version="${SBX_VERSION:-未知}" latest_version="${SBX_LATEST_VERSION:-未知}" installer
+
+    if [ "$latest_version" = "未知" ]; then
+        warn "无法获取 SBX 最新版本，请检查网络连接"
+        pause
+        return
+    fi
+    if [ "$current_version" != "未知" ] && [ "$(printf '%s\n' "${current_version#v}" "${latest_version#v}" | sort -V | tail -1)" = "${current_version#v}" ]; then
+        ok "SBX 已是最新版本：$current_version"
+        pause
+        return
+    fi
+
+    echo
+    echo "当前 SBX 版本：$current_version"
+    echo "最新 SBX 版本：$latest_version"
+    read -r -p "确认更新 SBX 管理器？[y/N]：" answer
+    case "${answer,,}" in
+        y|yes) ;;
+        *) info "已取消更新"; return ;;
+    esac
+
+    info "正在下载并安装 SBX $latest_version..."
+    installer=$(mktemp /tmp/sbx-update.XXXXXX)
+    if sbx_curl -fsSL https://raw.githubusercontent.com/driftbottle61/sbx/main/install.sh \
+        -o "$installer" && bash "$installer" --skip-deps --ref "$latest_version"; then
+        ok "SBX 更新完成，请重新进入管理器"
+    else
+        error "SBX 更新失败，原安装和配置应保持不变"
+    fi
+    rm -f "$installer"
+    pause
+}
+
 install_custom() {
     local fresh_install=0
     [ -x "$SINGBOX_BIN" ] || fresh_install=1

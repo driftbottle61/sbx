@@ -92,11 +92,38 @@ fi
 
 # Fetch the latest stable upstream release for comparison.  A dashboard
 # refresh must remain usable when GitHub is unavailable, so this is best effort.
-LATEST_VERSION="${SBX_LATEST_VERSION_CACHE:-未知}"
+LATEST_VERSION="${SINGBOX_LATEST_VERSION_CACHE:-未知}"
 now_epoch=$(date +%s)
-cache_epoch=${SBX_LATEST_VERSION_CACHE_EPOCH:-0}
+cache_epoch=${SINGBOX_LATEST_VERSION_CACHE_EPOCH:-0}
 if [ "$LATEST_VERSION" = "未知" ] || [ $((now_epoch - cache_epoch)) -ge 21600 ]; then
   LATEST_VERSION="未知"
+fi
+
+SBX_CURRENT_VERSION="${SBX_VERSION:-未知}"
+SBX_LATEST_VERSION="${SBX_LATEST_VERSION_CACHE:-未知}"
+sbx_latest_cache_epoch=${SBX_LATEST_VERSION_CACHE_EPOCH:-0}
+if [ "$SBX_LATEST_VERSION" = "未知" ] || [ $((now_epoch - sbx_latest_cache_epoch)) -ge 21600 ]; then
+  SBX_LATEST_VERSION="未知"
+fi
+if [ "$SBX_LATEST_VERSION" = "未知" ] && command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    if command -v setup_download_proxy >/dev/null 2>&1; then
+        setup_download_proxy >/dev/null 2>&1 || true
+    fi
+    SBX_LATEST_VERSION=$(curl -fsSL --connect-timeout 2 --max-time 4 \
+        https://api.github.com/repos/driftbottle61/sbx/releases/latest 2>/dev/null \
+        | jq -r '.tag_name // empty' 2>/dev/null)
+    [ -n "$SBX_LATEST_VERSION" ] || SBX_LATEST_VERSION="未知"
+    [ "$SBX_LATEST_VERSION" = "未知" ] || SBX_LATEST_VERSION="v${SBX_LATEST_VERSION#v}"
+    if [ "$SBX_LATEST_VERSION" != "未知" ]; then
+        SBX_LATEST_VERSION_CACHE="$SBX_LATEST_VERSION"
+        SBX_LATEST_VERSION_CACHE_EPOCH="$now_epoch"
+    fi
+fi
+
+SBX_UPDATE_AVAILABLE=0
+if [ "$SBX_CURRENT_VERSION" != "未知" ] && [ "$SBX_LATEST_VERSION" != "未知" ] \
+    && [ "$(printf '%s\n' "${SBX_CURRENT_VERSION#v}" "${SBX_LATEST_VERSION#v}" | sort -V | tail -1)" != "${SBX_CURRENT_VERSION#v}" ]; then
+    SBX_UPDATE_AVAILABLE=1
 fi
 if [ "$LATEST_VERSION" = "未知" ] && command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
     # Initialize the configured download proxy silently for the GitHub query.
@@ -118,8 +145,8 @@ if [ "$LATEST_VERSION" = "未知" ] && command -v curl >/dev/null 2>&1 && comman
     [ -n "$LATEST_VERSION" ] || LATEST_VERSION="未知"
     [ "$LATEST_VERSION" = "未知" ] || LATEST_VERSION="v${LATEST_VERSION#v}"
     if [ "$LATEST_VERSION" != "未知" ]; then
-        SBX_LATEST_VERSION_CACHE="$LATEST_VERSION"
-        SBX_LATEST_VERSION_CACHE_EPOCH="$now_epoch"
+        SINGBOX_LATEST_VERSION_CACHE="$LATEST_VERSION"
+        SINGBOX_LATEST_VERSION_CACHE_EPOCH="$now_epoch"
     fi
 fi
 
@@ -265,6 +292,9 @@ cat <<EOF
  Zashboard     : ${ZASHBOARD}
  配置链接      : ${CONFIG_URL_STATUS}
 
+ SBX 管理器     : ${SBX_CURRENT_VERSION}
+ SBX 最新版本   : ${SBX_LATEST_VERSION}
+
  启动时间      : ${START_TIME}
 
 
@@ -281,6 +311,8 @@ cat <<EOF
  5. 工具箱
 
  6. Web 面板
+
+ 7. 更新 SBX 管理器$([ "$SBX_UPDATE_AVAILABLE" -eq 1 ] && printf '（有新版本）' || printf '')
 
  0. 退出
 
