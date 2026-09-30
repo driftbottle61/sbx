@@ -1,0 +1,80 @@
+#!/bin/sh
+set -eu
+
+mode="${1:-$(uci -q get sbx.main.config_profile || uci -q get sbx.main.mode || echo proxy-only)}"
+override_url="${2:-$(uci -q get sbx.main.active_config_url || true)}"
+
+case "$mode" in
+	proxy-only)
+		uci set sbx.main.mode='proxy-only'
+		uci set sbx.main.config_profile='proxy-only'
+		uci set sbx.main.active_config_url=''
+		uci commit sbx
+		exit 0
+		;;
+	tun)
+		url="${override_url:-$(uci -q get sbx.main.tun_config_url || true)}"
+		;;
+	tproxy)
+		url="${override_url:-$(uci -q get sbx.main.tproxy_config_url || true)}"
+		;;
+	*)
+		echo "unsupported mode: $mode" >&2
+		exit 2
+		;;
+esac
+
+[ -n "${url:-}" ] || { echo "no config URL configured for $mode mode" >&2; exit 1; }
+
+case "$url" in
+	http://*|https://*) ;;
+	*) echo "config URL must use http:// or https://" >&2; exit 1 ;;
+esac
+
+target=$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)
+tmp="${target}.download.$$"
+
+trap 'rm -f "$tmp"' EXIT INT TERM
+
+mkdir -p "$(dirname "$target")"
+curl -fsSL --retry 2 --connect-timeout 15 --max-time 120 "$url" -o "$tmp"
+[ -s "$tmp" ] || { echo "downloaded config is empty" >&2; exit 1; }
+
+if ! /usr/bin/sing-box check -c "$tmp" >/tmp/sbx-remote-check.out 2>&1; then
+	cat /tmp/sbx-remote-check.out >&2
+	exit 1
+fi
+
+if command -v jsonfilter >/dev/null 2>&1; then
+	case "$mode" in
+		tun)
+			config_if=$(jsonfilter -q -i "$tmp" -e '@.inbounds[@.type="tun"].interface_name' 2>/dev/null | head -n1 || true)
+			[ -n "$config_if" ] || { echo "selected TUN configuration has no tun inbound" >&2; exit 1; }
+			;;
+		tproxy)
+			config_port=$(jsonfilter -q -i "$tmp" -e '@.inbounds[@.type="tproxy"].listen_port' 2>/dev/null | head -n1 || true)
+			[ -n "$config_port" ] || { echo "selected TProxy configuration has no tproxy inbound" >&2; exit 1; }
+			;;
+	esac
+fi
+
+chmod 600 "$tmp"
+mv "$tmp" "$target"
+
+if [ "$mode" = "tproxy" ] && command -v jsonfilter >/dev/null 2>&1; then
+	config_port=$(jsonfilter -q -i "$target" -e '@.inbounds[@.type="tproxy"].listen_port' 2>/dev/null | head -n1 || true)
+	if [ -n "$config_port" ]; then
+		uci set sbx.main.tproxy_port="$config_port"
+	fi
+fi
+
+uci set sbx.main.mode="$mode"
+uci set sbx.main.config_profile="$mode"
+uci set sbx.main.active_config_url="$url"
+case "$mode" in
+	tun) uci set sbx.main.tun_config_url="$url" ;;
+	tproxy) uci set sbx.main.tproxy_config_url="$url" ;;
+esac
+uci commit sbx
+
+printf 'loaded %s configuration from %s\n' "$mode" "$url"

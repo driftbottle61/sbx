@@ -1,0 +1,63 @@
+{
+  "luci-app-sbx": {
+    "description": "Grant access to SBX settings and service control",
+    "read": {
+      "uci": ["sbx"],
+      "ubus": {
+        "file": [ "read" ],
+        "uci": [ "get" ]
+      },
+      "file": {
+        "/usr/bin/sbx-luci-status": [ "exec" ],
+        "/usr/bin/sbx-luci-version singbox": [ "exec" ],
+        "/usr/bin/sbx-luci-version sbx": [ "exec" ],
+        "/usr/bin/sbx-luci-action check": [ "exec" ],
+        "/usr/bin/sbx-luci-action log": [ "exec" ],
+        "/usr/bin/sbx-luci-action status": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-restart": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-restart tun": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-restart tproxy": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-restart proxy-only": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action apply-mode tun": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action apply-mode tproxy": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action apply-mode proxy-only": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action route-status": [ "exec" ]
+        ,"/usr/bin/sbx-luci-sync": [ "exec" ]
+        ,"/usr/bin/sbx-luci-route status": [ "exec" ]
+        ,"/usr/bin/sbx-luci-config tun check": [ "exec" ]
+        ,"/usr/bin/sbx-luci-config tproxy check": [ "exec" ]
+        ,"/usr/bin/sbx-zashboard status": [ "exec" ]
+        ,"/www/sbx/config-tun.json": [ "read" ]
+        ,"/www/sbx/config-tproxy.json": [ "read" ]
+        ,"/etc/sing-box/config.json": [ "read" ]
+      }
+    },
+    "write": {
+      "uci": ["sbx"],
+      "ubus": {
+        "file": [ "write" ],
+        "uci": [ "set", "commit", "apply" ]
+      },
+      "file": {
+        "/usr/bin/sbx-luci-action start": [ "exec" ],
+        "/usr/bin/sbx-luci-action stop": [ "exec" ],
+        "/usr/bin/sbx-luci-action restart": [ "exec" ],
+        "/usr/bin/sbx-luci-action reload": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-restart": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-restart tun": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-restart tproxy": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-restart proxy-only": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action apply-mode tun": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action apply-mode tproxy": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action apply-mode proxy-only": [ "exec" ]
+        ,"/usr/bin/sbx-luci-sync": [ "exec" ]
+        ,"/usr/bin/sbx-luci-route apply": [ "exec" ]
+        ,"/usr/bin/sbx-luci-route clear": [ "exec" ]
+        ,"/usr/bin/sbx-zashboard install": [ "exec" ]
+        ,"/usr/bin/sbx-zashboard update": [ "exec" ]
+        ,"/www/sbx/config-tun.json": [ "write" ]
+        ,"/www/sbx/config-tproxy.json": [ "write" ]
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+#!/bin/sh
+
+pid="$(pidof sing-box 2>/dev/null | awk '{print $1}')"
+if [ -n "$pid" ]; then running=true; else running=false; pid=null; fi
+version="$(/usr/bin/sing-box version 2>/dev/null | sed -n '1{s/\\/\\\\/g;s/"/\\"/g;p;}')"
+version="$(printf '%s' "$version" | sed 's/^sing-box version /v/')"
+cpu='0'; rss='0'
+if [ -n "$pid" ]; then
+	set -- $(ps -o pcpu= -o rss= -p "$pid" 2>/dev/null || true)
+	cpu="${1:-0}"; rss="${2:-0}"
+fi
+mem="$(awk '/MemTotal:/{t=$2}/MemAvailable:/{a=$2}END{if(t)printf "%.1f",(t-a)*100/t; else print "0"}' /proc/meminfo 2>/dev/null)"
+mode="$(uci -q get sbx.main.mode || echo proxy-only)"
+
+printf '{"running":%s,"pid":%s,"version":"%s","sbx_version":"0.1.0","mode":"%s","cpu":"%s","memory":"%s","rss":"%s","socks_port":1080,"http_port":8080}\n' \
+	"$running" "$pid" "$version" "$mode" "$cpu" "$mem" "$rss"

@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+kind="${1:-singbox}"
+case "$kind" in
+singbox) local=$(/usr/bin/sing-box version 2>/dev/null | sed -n 's/.*sing-box version \([^ ]*\).*/\1/p'); repo='SagerNet/sing-box' ;;
+	sbx) local='0.1.0'; repo='' ;;
+	*) exit 2 ;;
+esac
+latest=''
+[ -n "$repo" ] && latest=$(curl -fsSL --connect-timeout 10 "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+[ -n "$latest" ] || latest='unknown'
+cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
+printf '{"local":"v%s","latest":"%s","update_available":%s}\n' "$local" "$latest" "$update"

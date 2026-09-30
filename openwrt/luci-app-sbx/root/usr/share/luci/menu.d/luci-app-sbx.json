@@ -1,0 +1,13 @@
+{
+  "admin/services/sbx": {
+    "title": "SBX",
+    "order": 60,
+    "action": {
+      "type": "view",
+      "path": "sbx"
+    },
+    "depends": {
+      "acl": [ "luci-app-sbx" ]
+    }
+  }
+}

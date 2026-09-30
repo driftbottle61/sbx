@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+name="${1:-}"
+case "$name" in
+  tun) file=/www/sbx/config-tun.json ;;
+  tproxy) file=/www/sbx/config-tproxy.json ;;
+  *) echo "unknown template" >&2; exit 2 ;;
+esac
+case "${2:-read}" in
+  read) cat "$file" ;;
+  check) /usr/bin/sing-box check -c "$file" ;;
+  *) echo "unsupported action" >&2; exit 2 ;;
+esac

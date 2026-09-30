@@ -1,0 +1,90 @@
+#!/bin/sh
+set -eu
+
+mode=$(uci -q get sbx.main.mode || echo proxy-only)
+lan_if=$(uci -q get sbx.main.lan_interface || echo br-lan)
+tproxy_port=$(uci -q get sbx.main.tproxy_port || echo 7895)
+tproxy_mark=$(uci -q get sbx.main.tproxy_mark || echo 1)
+tproxy_table=$(uci -q get sbx.main.tproxy_table || echo 100)
+tun_table=$(uci -q get sbx.main.tun_table || echo 101)
+tun_interface=$(uci -q get sbx.main.tun_interface || true)
+
+detect_tun_interface() {
+	if [ -n "$tun_interface" ]; then
+		printf '%s\n' "$tun_interface"
+		return 0
+	fi
+	if command -v jsonfilter >/dev/null 2>&1; then
+		jsonfilter -q -i "$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)" -e '@.inbounds[@.type="tun"].interface_name' 2>/dev/null | head -n1
+	fi
+}
+
+clear_tproxy() {
+	nft delete table inet sbx 2>/dev/null || true
+	ip rule del fwmark "$tproxy_mark" table "$tproxy_table" 2>/dev/null || true
+	ip route flush table "$tproxy_table" 2>/dev/null || true
+}
+
+clear_tun() {
+	ip rule del iif "$lan_if" table "$tun_table" 2>/dev/null || true
+	ip route flush table "$tun_table" 2>/dev/null || true
+}
+
+apply_tproxy() {
+	sysctl -w net.ipv4.ip_forward=1 >/dev/null
+	clear_tun
+	clear_tproxy
+	ip rule add fwmark "$tproxy_mark" table "$tproxy_table" priority 100 2>/dev/null || true
+	ip route add local 0.0.0.0/0 dev lo table "$tproxy_table"
+	nft add table inet sbx
+	nft add set inet sbx bypass4 '{ type ipv4_addr; flags interval; }'
+	nft add element inet sbx bypass4 '{ 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 }'
+	nft add chain inet sbx prerouting '{ type filter hook prerouting priority mangle; policy accept; }'
+	nft add rule inet sbx prerouting iifname != "$lan_if" return
+	nft add rule inet sbx prerouting ip daddr @bypass4 return
+	nft add rule inet sbx prerouting meta l4proto '{ tcp, udp }' meta mark set "$tproxy_mark" tproxy ip to 127.0.0.1:"$tproxy_port" accept
+}
+
+apply_tun() {
+	sysctl -w net.ipv4.ip_forward=1 >/dev/null
+	clear_tproxy
+	clear_tun
+	tun_if=$(detect_tun_interface)
+	[ -n "$tun_if" ] || { echo "tun interface not found in config" >&2; exit 1; }
+	tries=0
+	while ! ip link show "$tun_if" >/dev/null 2>&1; do
+		tries=$((tries + 1))
+		[ "$tries" -le 20 ] || { echo "tun interface $tun_if is not up" >&2; exit 1; }
+		sleep 1
+	done
+	ip link show "$tun_if" >/dev/null 2>&1 || { echo "tun interface $tun_if is not up" >&2; exit 1; }
+	ip rule add iif "$lan_if" table "$tun_table" priority 101 2>/dev/null || true
+	ip route add default dev "$tun_if" table "$tun_table"
+}
+
+case "${1:-apply}" in
+	apply)
+		case "$mode" in
+			proxy-only) clear_tproxy; clear_tun ;;
+			tun) apply_tun ;;
+			tproxy) apply_tproxy ;;
+			*) echo "unsupported mode: $mode" >&2; exit 2 ;;
+		esac
+		;;
+	clear)
+		clear_tproxy
+		clear_tun
+		;;
+	status)
+		printf 'mode=%s lan_if=%s tproxy_port=%s mark=%s tproxy_table=%s tun_table=%s tun_interface=%s\n' "$mode" "$lan_if" "$tproxy_port" "$tproxy_mark" "$tproxy_table" "$tun_table" "$(detect_tun_interface || true)"
+		ip rule show | grep -F "lookup $tproxy_table" || true
+		ip rule show | grep -F "lookup $tun_table" || true
+		ip route show table "$tproxy_table" || true
+		ip route show table "$tun_table" || true
+		nft list table inet sbx 2>/dev/null || true
+		;;
+	*)
+		echo "usage: $0 {apply|clear|status}" >&2
+		exit 2
+		;;
+esac

@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+base=/www/zashboard
+meta="$base/.version"
+tmp="/tmp/sbx-zashboard.$$"
+api='https://api.github.com/repos/Zephyruso/zashboard/releases/latest'
+cleanup() { rm -rf "$tmp"; }
+trap cleanup EXIT INT TERM
+json_escape() { sed 's/[\\"]/\\&/g'; }
+status() {
+  if [ -f "$meta" ] && [ -f "$base/index.html" ]; then
+    v=$(cat "$meta")
+    printf '{"installed":true,"version":"%s","url":"/zashboard/"}\n' "$(printf '%s' "$v" | json_escape)"
+  else
+    printf '{"installed":false,"version":null,"url":"/zashboard/"}\n'
+  fi
+}
+install_or_update() {
+  mkdir -p "$tmp" "$tmp/new"
+  release=$(curl -fsSL --retry 2 --connect-timeout 10 "$api")
+  tag=$(printf '%s' "$release" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+  url=$(printf '%s' "$release" | sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*dist-no-fonts.zip\)".*/\1/p' | head -n1)
+  [ -n "$tag" ] && [ -n "$url" ] || { echo 'latest release asset not found' >&2; exit 1; }
+  curl -fL --retry 2 --connect-timeout 10 "$url" -o "$tmp/zashboard.zip"
+  unzip -q "$tmp/zashboard.zip" -d "$tmp/new"
+  if [ -f "$tmp/new/index.html" ]; then src="$tmp/new"; else src=$(find "$tmp/new" -mindepth 1 -maxdepth 1 -type d | head -n1); fi
+  [ -n "${src:-}" ] && [ -f "$src/index.html" ] || { echo 'archive has no index.html' >&2; exit 1; }
+  printf '%s\n' "$tag" > "$src/.version"
+  old=""
+  if [ -d "$base" ]; then old="/tmp/zashboard-old.$$"; mv "$base" "$old"; fi
+  mkdir -p "$base"
+  cp -a "$src"/. "$base"/
+  rm -rf "$old"
+  status
+}
+case "${1:-status}" in
+  status) status ;;
+  install|update) install_or_update ;;
+  *) echo "usage: $0 {status|install|update}" >&2; exit 2 ;;
+esac

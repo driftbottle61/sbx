@@ -45,7 +45,7 @@ passwd
 ```bash
 ip -br addr
 ip route
-curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.24/install-oneclick.sh | bash
+curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.33/install-oneclick.sh | bash
 ```
 
 ## 检查配置

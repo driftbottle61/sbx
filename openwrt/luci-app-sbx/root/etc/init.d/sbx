@@ -1,0 +1,15 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+
+start() {
+	[ "$(uci -q get sbx.main.enabled || echo 0)" = "1" ] || return 0
+	/usr/bin/sbx-luci-sync || return 1
+	/etc/init.d/sing-box start
+	/usr/bin/sbx-luci-route apply || return 1
+}
+
+stop() { /etc/init.d/sing-box stop; /usr/bin/sbx-luci-route clear; }
+restart() { /usr/bin/sbx-luci-sync && /etc/init.d/sing-box restart && /usr/bin/sbx-luci-route apply; }
+reload() { /etc/init.d/sing-box reload; }
+status() { /etc/init.d/sing-box status; }

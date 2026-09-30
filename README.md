@@ -18,10 +18,10 @@ With `wget`:
 wget -qO- https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh | sudo bash
 ```
 
-Install the fixed `v1.2.1` release as `root`:
+Install the fixed `v1.2.33` release as `root`:
 
 ```bash
-curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.1/install-oneclick.sh | bash
+curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.33/install-oneclick.sh | bash
 ```
 
 Then start the manager:
@@ -64,7 +64,7 @@ SBX_DOWNLOAD_PROXY=off sbx
 
 ```bash
 curl -fsSL https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh \
-  | sudo bash -s -- --ref v1.2.1
+  | sudo bash -s -- --ref v1.2.33
 ```
 
 ```bash
@@ -96,6 +96,10 @@ directory under `/var/lib` before removal.
 ## PVE CT 模板
 
 当前 SBX CT 的 PVE 创建命令和初始化检查见 [`docs/pve-ct-template.md`](docs/pve-ct-template.md)。
+
+## OpenWrt / ImmortalWrt
+
+SBX 还提供旁路由场景下的 LuCI 插件，支持 TUN/TProxy 模式切换、远程配置链接、策略路由、运行状态、实时日志和只读当前配置查看。构建和使用说明见 [`docs/openwrt-luci-app.md`](docs/openwrt-luci-app.md)。
 
 ## Supported systems
 
