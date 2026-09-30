@@ -27,6 +27,8 @@
         ,"/usr/bin/sbx-luci-config tun check": [ "exec" ]
         ,"/usr/bin/sbx-luci-config tproxy check": [ "exec" ]
         ,"/usr/bin/sbx-zashboard status": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-singbox": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-sbx": [ "exec" ]
         ,"/www/sbx/config-tun.json": [ "read" ]
         ,"/www/sbx/config-tproxy.json": [ "read" ]
         ,"/etc/sing-box/config.json": [ "read" ]
