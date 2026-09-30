@@ -3,7 +3,16 @@ set -eu
 kind="${1:-singbox}"
 case "$kind" in
 singbox) local=$(/usr/bin/sing-box version 2>/dev/null | sed -n 's/.*sing-box version \([^ ]*\).*/\1/p'); repo='SagerNet/sing-box' ;;
-	sbx) local='0.1.0'; repo='' ;;
+sbx)
+    local=$(apk info -a luci-app-sbx 2>/dev/null | sed -n 's/^luci-app-sbx-\([^ ]*\) description:.*/\1/p' | head -n1 || true)
+    [ -n "$local" ] || local='unknown'
+    repo=''
+    latest=$(curl -fsSL --connect-timeout 10 'https://raw.githubusercontent.com/driftbottle61/sbx/openwrt/openwrt/luci-app-sbx/Makefile' 2>/dev/null | sed -n 's/^PKG_VERSION:=//p' | head -n1 || true)
+    [ -n "$latest" ] || latest='unknown'
+    cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
+    printf '{"local":"v%s","latest":"v%s","update_available":%s,"update_kind":"sbx"}\n' "$local" "$latest" "$update"
+    exit 0
+    ;;
 	*) exit 2 ;;
 esac
 latest=''

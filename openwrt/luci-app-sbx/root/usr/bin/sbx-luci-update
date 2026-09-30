@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+kind="${1:-}"
+tmpdir=/tmp/sbx-update
+mkdir -p "$tmpdir"
+case "$kind" in
+singbox)
+	arch=$(uname -m)
+	case "$arch" in
+		x86_64|amd64) asset_arch=amd64 ;;
+		aarch64|arm64) asset_arch=arm64 ;;
+		armv7*) asset_arch=armv7 ;;
+		*) echo "unsupported architecture: $arch" >&2; exit 1 ;;
+	esac
+	latest=$(curl -fsSL --connect-timeout 10 https://api.github.com/repos/SagerNet/sing-box/releases/latest)
+	url=$(printf '%s' "$latest" | sed -n "s#.*\\\"browser_download_url\\\"[[:space:]]*:[[:space:]]*\\\"\\([^\\\"]*sing-box-[0-9.]*-linux-${asset_arch}-musl.tar.gz\\\"\).*#\\1#p" | head -n1)
+	[ -n "$url" ] || { echo "no matching sing-box musl asset" >&2; exit 1; }
+	archive="$tmpdir/sing-box.tar.gz"
+	curl -fL --connect-timeout 10 --retry 2 "$url" -o "$archive"
+	newbin="$tmpdir/sing-box"
+	tar -xzf "$archive" -O "$(tar -tzf "$archive" | grep '/sing-box$' | head -n1)" > "$newbin"
+	chmod 0755 "$newbin"
+	"$newbin" check -c "$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)" >/dev/null
+	/etc/init.d/sing-box stop >/dev/null 2>&1 || true
+	cp "$newbin" /usr/bin/sing-box
+	/etc/init.d/sing-box start >/dev/null 2>&1
+	;;
+sbx)
+	url="${SBX_OPENWRT_PACKAGE_URL:-}"
+	[ -n "$url" ] || { echo "SBX_OPENWRT_PACKAGE_URL is not configured" >&2; exit 1; }
+	file="$tmpdir/luci-app-sbx.apk"
+	curl -fL --connect-timeout 10 --retry 2 "$url" -o "$file"
+	apk add --allow-untrusted "$file"
+	;;
+*) echo "usage: $0 {singbox|sbx}" >&2; exit 2 ;;
+esac
+echo "updated $kind"

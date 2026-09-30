@@ -55,6 +55,8 @@
         ,"/usr/bin/sbx-luci-route clear": [ "exec" ]
         ,"/usr/bin/sbx-zashboard install": [ "exec" ]
         ,"/usr/bin/sbx-zashboard update": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-singbox": [ "exec" ]
+        ,"/usr/bin/sbx-luci-action update-sbx": [ "exec" ]
         ,"/www/sbx/config-tun.json": [ "write" ]
         ,"/www/sbx/config-tproxy.json": [ "write" ]
       }

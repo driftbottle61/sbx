@@ -120,8 +120,31 @@ return view.extend({
 		});
 
 		var logBox = root.querySelector('.sbx-log');
-		fs.exec_direct('/usr/bin/sbx-luci-version', [ 'singbox' ]).then(function(value) {
-			try { var version = JSON.parse(commandOutput(value) || '{}'); root.querySelector('[data-version="latest"]').textContent = version.latest || '-'; } catch (e) {}
+		Promise.all([
+			fs.exec_direct('/usr/bin/sbx-luci-version', [ 'singbox' ]),
+			fs.exec_direct('/usr/bin/sbx-luci-version', [ 'sbx' ])
+		]).then(function(values) {
+			updateVersion(root, 'singbox', values[0]);
+			updateVersion(root, 'sbx', values[1]);
+		});
+		root.querySelectorAll('[data-update-kind]').forEach(function(button) {
+			button.addEventListener('click', function() {
+				var kind = button.dataset.updateKind;
+				var result = root.querySelector('[data-update-result="' + kind + '"]');
+				button.disabled = true;
+				result.className = 'sbx-result';
+				result.textContent = _('正在更新…');
+				fs.exec_direct('/usr/bin/sbx-luci-action', [ 'update-' + kind ]).then(function(value) {
+					var error = commandError(value);
+					result.className = error ? 'sbx-result error' : 'sbx-result success';
+					result.textContent = error ? _('更新失败：') + error : _('更新成功，请刷新页面确认版本');
+					button.disabled = false;
+				}).catch(function(error) {
+					result.className = 'sbx-result error';
+					result.textContent = _('更新失败：') + error;
+					button.disabled = false;
+				});
+			});
 		});
 		function refresh() {
 			return Promise.all([
@@ -150,9 +173,9 @@ function statusPane(status) {
 	return E('div', { 'class': 'sbx-card' }, [
 		E('div', { 'class': 'sbx-grid' }, [
 			E('label', {}, _('sing-box 版本')), E('span', { 'data-status': 'version' }, status.version || '-'),
-			E('label', {}, _('sing-box 最新版')), E('span', { 'data-version': 'latest' }, _('查询中…')),
-			E('label', {}, _('SBX 版本')), E('span', {}, '0.1.0'),
-			E('label', {}, _('SBX 最新版')), E('span', {}, _('本地开发版')),
+			E('label', {}, _('sing-box 最新版')), E('span', { 'data-version:latest': 'singbox', 'data-version': 'latest-singbox' }, _('查询中…')), E('button', { 'data-update-kind': 'singbox', 'class': 'cbi-button cbi-button-action', 'hidden': true }, _('更新')), E('span', { 'data-update-result': 'singbox', 'class': 'sbx-result' }),
+			E('label', {}, _('SBX/OpenWrt 版本')), E('span', { 'data-version': 'local-sbx' }, _('查询中…')),
+			E('label', {}, _('SBX/OpenWrt 最新版')), E('span', { 'data-version': 'latest-sbx' }, _('查询中…')), E('button', { 'data-update-kind': 'sbx', 'class': 'cbi-button cbi-button-action', 'hidden': true }, _('更新')), E('span', { 'data-update-result': 'sbx', 'class': 'sbx-result' }),
 			E('label', {}, _('运行状态')), E('span', { 'data-status': 'running' }, status.running ? _('运行中') : _('已停止')),
 			E('label', {}, _('CPU 占用')), E('span', { 'data-status': 'cpu' }, (status.cpu || '0') + '%'),
 			E('label', {}, _('内存占用')), E('span', { 'data-status': 'memory' }, (status.memory || '0') + '%'),
@@ -198,4 +221,15 @@ function updateStatus(root, status) {
 	Object.keys(values).forEach(function(key) { var node = root.querySelector('[data-status="' + key + '"]'); if (node) node.textContent = values[key]; });
 	var top = root.querySelector('[data-status="top-running"]');
 	if (top) { top.textContent = status.running ? 'running' : 'stopped'; top.className = status.running ? 'sbx-running' : 'sbx-stopped'; }
+}
+function updateVersion(root, kind, value) {
+	try {
+		var version = JSON.parse(commandOutput(value) || '{}');
+		var local = root.querySelector('[data-version="' + (kind === 'sbx' ? 'local-sbx' : 'local-singbox') + '"]');
+		var latest = root.querySelector('[data-version="latest-' + kind + '"]');
+		if (local) local.textContent = version.local || '-';
+		if (latest) latest.textContent = version.latest || '-';
+		var button = root.querySelector('[data-update-kind="' + kind + '"]');
+		if (button) button.hidden = !version.update_available;
+	} catch (e) {}
 }

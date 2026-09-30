@@ -2,6 +2,12 @@
 
 action="$1"
 case "$action" in
+	update-singbox)
+		/usr/bin/sbx-luci-update singbox
+		;;
+	update-sbx)
+		/usr/bin/sbx-luci-update sbx
+		;;
 	apply-mode)
 		profile="${2:-}"
 		case "$profile" in tun|tproxy|proxy-only) ;; *) echo "invalid mode" >&2; exit 2 ;; esac
