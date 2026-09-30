@@ -1,6 +1,17 @@
 #!/bin/sh
 set -eu
 kind="${1:-singbox}"
+curl_text() {
+	url="$1"
+	if curl -fsS --connect-timeout 3 -x http://127.0.0.1:8080 https://api.github.com/rate_limit >/dev/null 2>&1; then
+		curl -fsSL -x http://127.0.0.1:8080 --connect-timeout 10 "$url"
+	elif curl -fsS --connect-timeout 3 --socks5-hostname 127.0.0.1:1080 https://api.github.com/rate_limit >/dev/null 2>&1; then
+		curl -fsSL --socks5-hostname 127.0.0.1:1080 --connect-timeout 10 "$url"
+	else
+		curl -fsSL --connect-timeout 10 "$url"
+	fi
+}
+
 case "$kind" in
 singbox) local=$(/usr/bin/sing-box version 2>/dev/null | sed -n 's/.*sing-box version \([^ ]*\).*/\1/p'); repo='SagerNet/sing-box' ;;
 sbx)
@@ -8,7 +19,7 @@ sbx)
     [ -n "$local" ] || local='unknown'
     local=${local%-r*}
     repo=''
-    latest=$(curl -fsSL --connect-timeout 10 'https://api.github.com/repos/driftbottle61/sbx/releases?per_page=100' 2>/dev/null | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\(openwrt-v[0-9.]*\)".*/\1/p' | sed 's/^openwrt-v//' | sort -V | tail -n1 || true)
+    latest=$(curl_text 'https://api.github.com/repos/driftbottle61/sbx/releases?per_page=100' 2>/dev/null | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\(openwrt-v[0-9.]*\)".*/\1/p' | sed 's/^openwrt-v//' | sort -V | tail -n1 || true)
     [ -n "$latest" ] || latest='unknown'
     cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
     printf '{"local":"v%s","latest":"v%s","update_available":%s,"update_kind":"sbx"}\n' "$local" "$latest" "$update"
@@ -17,7 +28,7 @@ sbx)
 	*) exit 2 ;;
 esac
 latest=''
-[ -n "$repo" ] && latest=$(curl -fsSL --connect-timeout 10 "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+[ -n "$repo" ] && latest=$(curl_text "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
 [ -n "$latest" ] || latest='unknown'
 cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
 printf '{"local":"v%s","latest":"%s","update_available":%s}\n' "$local" "$latest" "$update"
