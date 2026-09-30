@@ -44,7 +44,7 @@ return view.extend({
 		]);
 
 		var style = E('style', {}, [
-			':root{color-scheme:dark}.sbx-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border-color,#444);margin:12px 0}.sbx-tab{padding:9px 16px;border:1px solid var(--border-color,#444);color:var(--text-color,#eee);background:var(--background-color,#1b1b1b);cursor:pointer}.sbx-tab.active{background:var(--primary-color,#0069a6);color:#fff}.sbx-pane{display:none;padding:8px 0}.sbx-pane.active{display:block}.sbx-card{border:1px solid var(--border-color,#444);padding:14px;margin:8px 0;background:var(--background-color,#1b1b1b);color:var(--text-color,#eee)}.sbx-grid{display:grid;grid-template-columns:180px 1fr;gap:10px;max-width:760px}.sbx-inline-update{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.sbx-grid input,.sbx-grid select{width:100%;box-sizing:border-box;color:var(--text-color,#eee);background:var(--input-background-color,#252525);border:1px solid var(--border-color,#555);padding:6px}.sbx-mono{width:100%;min-height:480px;box-sizing:border-box;font-family:monospace;white-space:pre;overflow:auto;color:var(--text-color,#eee);background:var(--input-background-color,#151515);border:1px solid var(--border-color,#555)}.sbx-log{height:560px;overflow:auto;background:#111;color:#eee;padding:12px;white-space:pre-wrap;font-family:monospace;border:1px solid var(--border-color,#444)}.sbx-card a{color:var(--link-color,#69b7ff)}.sbx-result{margin-top:8px;min-height:20px}.sbx-result.success{color:#72d572}.sbx-result.error{color:#ff7777}'
+			':root{color-scheme:dark}.sbx-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border-color,#444);margin:12px 0}.sbx-tab{padding:9px 16px;border:1px solid var(--border-color,#444);color:var(--text-color,#eee);background:var(--background-color,#1b1b1b);cursor:pointer}.sbx-tab.active{background:var(--primary-color,#0069a6);color:#fff}.sbx-pane{display:none;padding:8px 0}.sbx-pane.active{display:block}.sbx-card{border:1px solid var(--border-color,#444);padding:16px;margin:8px 0;background:var(--background-color,#1b1b1b);color:var(--text-color,#eee)}.sbx-grid{display:grid;grid-template-columns:180px 1fr;gap:10px;max-width:760px}.sbx-status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}.sbx-metric{border:1px solid var(--border-color,#3d3d3d);border-radius:8px;background:rgba(255,255,255,.035);padding:14px}.sbx-metric-label{font-size:12px;color:var(--muted-color,#aaa);margin-bottom:8px}.sbx-metric-value{font-size:20px;font-weight:700;line-height:1.2}.sbx-section-title{font-weight:700;margin:16px 0 10px}.sbx-version-list{display:grid;grid-template-columns:1fr;gap:10px}.sbx-version-row{display:grid;grid-template-columns:minmax(150px,1fr) minmax(120px,auto) minmax(120px,auto);align-items:center;gap:12px;border:1px solid var(--border-color,#3d3d3d);border-radius:8px;background:rgba(255,255,255,.025);padding:10px 12px}.sbx-version-name{font-weight:700}.sbx-version-meta{color:var(--muted-color,#aaa);font-size:12px}.sbx-mode-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.sbx-mode-row select{min-width:180px}.sbx-inline-update{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.sbx-grid input,.sbx-grid select,.sbx-mode-row select{box-sizing:border-box;color:var(--text-color,#eee);background:var(--input-background-color,#252525);border:1px solid var(--border-color,#555);padding:6px}.sbx-grid input,.sbx-grid select{width:100%}.sbx-mono{width:100%;min-height:480px;box-sizing:border-box;font-family:monospace;white-space:pre;overflow:auto;color:var(--text-color,#eee);background:var(--input-background-color,#151515);border:1px solid var(--border-color,#555)}.sbx-log{height:560px;overflow:auto;background:#111;color:#eee;padding:12px;white-space:pre-wrap;font-family:monospace;border:1px solid var(--border-color,#444)}.sbx-card a{color:var(--link-color,#69b7ff)}.sbx-result{margin-top:8px;min-height:20px}.sbx-result.success{color:#72d572}.sbx-result.error{color:#ff7777}'
 		]);
 		root.appendChild(style);
 		root.appendChild(E('style', {}, [
@@ -176,21 +176,42 @@ function commandOutput(value) {
 function statusPane(status) {
 	var mode = status.mode || 'proxy-only';
 	return E('div', { 'class': 'sbx-card' }, [
-		E('div', { 'class': 'sbx-grid' }, [
-			E('label', {}, _('sing-box 版本')), E('span', { 'data-status': 'version' }, status.version || '-'),
-			E('label', {}, _('sing-box 最新版')), E('div', { 'class': 'sbx-inline-update' }, [E('span', { 'data-version': 'latest-singbox' }, _('查询中…')), E('button', { 'data-update-kind': 'singbox', 'data-update-available': 'false', disabled: true, 'class': 'cbi-button cbi-button-action' }, _('更新')), E('span', { 'data-update-result': 'singbox', 'class': 'sbx-result' })]),
-			E('label', {}, _('SBX/OpenWrt 版本')), E('span', { 'data-version': 'local-sbx' }, _('查询中…')),
-			E('label', {}, _('SBX/OpenWrt 最新版')), E('div', { 'class': 'sbx-inline-update' }, [E('span', { 'data-version': 'latest-sbx' }, _('查询中…')), E('button', { 'data-update-kind': 'sbx', 'data-update-available': 'false', disabled: true, 'class': 'cbi-button cbi-button-action' }, _('更新')), E('span', { 'data-update-result': 'sbx', 'class': 'sbx-result' })]),
-			E('label', {}, _('运行状态')), E('span', { 'data-status': 'running' }, status.running ? _('运行中') : _('已停止')),
-			E('label', {}, _('CPU 占用')), E('span', { 'data-status': 'cpu' }, (status.cpu || '0') + '%'),
-			E('label', {}, _('内存占用')), E('span', { 'data-status': 'memory' }, (status.memory || '0') + '%'),
-			E('label', {}, _('运行模式')), E('select', { name: 'sbx-profile' }, [
+		E('div', { 'class': 'sbx-status-grid' }, [
+			metricCard(_('运行状态'), E('span', { 'data-status': 'running', 'class': status.running ? 'sbx-running' : 'sbx-stopped' }, status.running ? _('运行中') : _('已停止'))),
+			metricCard(_('运行模式'), mode === 'tun' ? 'TUN' : mode === 'tproxy' ? 'TProxy' : _('仅 SOCKS/HTTP')),
+			metricCard(_('CPU 占用'), E('span', { 'data-status': 'cpu' }, (status.cpu || '0') + '%')),
+			metricCard(_('内存占用'), E('span', { 'data-status': 'memory' }, (status.memory || '0') + '%'))
+		]),
+		E('div', { 'class': 'sbx-section-title' }, _('版本信息')),
+		E('div', { 'class': 'sbx-version-list' }, [
+			versionRow('sing-box', E('span', { 'data-status': 'version', 'data-version': 'local-singbox' }, status.version || '-'), E('span', { 'data-version': 'latest-singbox' }, _('查询中…')), 'singbox'),
+			versionRow('SBX/OpenWrt', E('span', { 'data-version': 'local-sbx' }, _('查询中…')), E('span', { 'data-version': 'latest-sbx' }, _('查询中…')), 'sbx')
+		]),
+		E('div', { 'class': 'sbx-section-title' }, _('运行模式')),
+		E('div', { 'class': 'sbx-mode-row' }, [
+			E('select', { name: 'sbx-profile' }, [
 				E('option', { value: 'tun', selected: mode === 'tun' }, 'TUN'),
 				E('option', { value: 'tproxy', selected: mode === 'tproxy' }, 'TProxy'),
 				E('option', { value: 'proxy-only', selected: mode === 'proxy-only' }, _('仅 SOCKS/HTTP'))
 			]),
-			E('label', {}, ''), E('div', {}, [E('button', { name: 'sbx-apply', 'class': 'cbi-button cbi-button-action' }, _('应用并重启')), E('div', { name: 'sbx-action-result', 'class': 'sbx-result' })])
+			E('button', { name: 'sbx-apply', 'class': 'cbi-button cbi-button-action' }, _('应用并重启')),
+			E('span', { name: 'sbx-action-result', 'class': 'sbx-result' })
 		])
+	]);
+}
+
+function metricCard(label, value) {
+	return E('div', { 'class': 'sbx-metric' }, [
+		E('div', { 'class': 'sbx-metric-label' }, label),
+		E('div', { 'class': 'sbx-metric-value' }, value)
+	]);
+}
+
+function versionRow(name, local, latest, kind) {
+	return E('div', { 'class': 'sbx-version-row' }, [
+		E('div', {}, [E('div', { 'class': 'sbx-version-name' }, name), E('div', { 'class': 'sbx-version-meta' }, [_('当前：'), local])]),
+		E('div', { 'class': 'sbx-inline-update' }, [E('span', { 'class': 'sbx-version-meta' }, _('最新：')), latest, E('button', { 'data-update-kind': kind, 'data-update-available': 'false', disabled: true, 'class': 'cbi-button cbi-button-action' }, _('更新'))]),
+		E('span', { 'data-update-result': kind, 'class': 'sbx-result' })
 	]);
 }
 
