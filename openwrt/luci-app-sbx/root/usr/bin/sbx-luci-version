@@ -8,7 +8,7 @@ sbx)
     [ -n "$local" ] || local='unknown'
     local=${local%-r*}
     repo=''
-    latest=$(curl -fsSL --connect-timeout 10 "https://api.github.com/repos/driftbottle61/sbx/contents/openwrt/luci-app-sbx/Makefile?ref=openwrt&ts=$(date +%s)" 2>/dev/null | jsonfilter -e '@.content' 2>/dev/null | tr -d '\n' | base64 -d 2>/dev/null | sed -n 's/^PKG_VERSION:=//p' | head -n1 || true)
+    latest=$(curl -fsSL --connect-timeout 10 'https://api.github.com/repos/driftbottle61/sbx/releases?per_page=100' 2>/dev/null | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\(openwrt-v[0-9.]*\)".*/\1/p' | sed 's/^openwrt-v//' | sort -V | tail -n1 || true)
     [ -n "$latest" ] || latest='unknown'
     cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
     printf '{"local":"v%s","latest":"v%s","update_available":%s,"update_kind":"sbx"}\n' "$local" "$latest" "$update"

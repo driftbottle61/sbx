@@ -26,8 +26,7 @@ singbox)
 	/etc/init.d/sing-box start >/dev/null 2>&1
 	;;
 sbx)
-	url="${SBX_OPENWRT_PACKAGE_URL:-}"
-	[ -n "$url" ] || { echo "SBX_OPENWRT_PACKAGE_URL is not configured" >&2; exit 1; }
+	url="${SBX_OPENWRT_PACKAGE_URL:-https://github.com/driftbottle61/sbx/releases/latest/download/luci-app-sbx-x86_64.apk}"
 	file="$tmpdir/luci-app-sbx.apk"
 	curl -fL --connect-timeout 10 --retry 2 "$url" -o "$file"
 	apk add --allow-untrusted "$file"
