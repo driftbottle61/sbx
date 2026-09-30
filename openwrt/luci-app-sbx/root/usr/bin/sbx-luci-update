@@ -26,7 +26,9 @@ singbox)
 	/etc/init.d/sing-box start >/dev/null 2>&1
 	;;
 sbx)
-	url="${SBX_OPENWRT_PACKAGE_URL:-https://github.com/driftbottle61/sbx/releases/latest/download/luci-app-sbx-x86_64.apk}"
+	latest=$(/usr/bin/sbx-luci-version sbx | sed -n 's/.*"latest":"v\([0-9.]*\)".*/\1/p')
+	[ -n "$latest" ] || { echo "unable to determine latest OpenWrt release" >&2; exit 1; }
+	url="${SBX_OPENWRT_PACKAGE_URL:-https://github.com/driftbottle61/sbx/releases/download/openwrt-v${latest}/luci-app-sbx-x86_64.apk}"
 	file="$tmpdir/luci-app-sbx.apk"
 	curl -fL --connect-timeout 10 --retry 2 "$url" -o "$file"
 	apk add --allow-untrusted "$file"
