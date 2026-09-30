@@ -5,6 +5,10 @@ tmpdir=/tmp/sbx-update
 mkdir -p "$tmpdir"
 case "$kind" in
 singbox)
+	if /usr/bin/sbx-luci-version singbox | grep -q '"update_available":false'; then
+		echo "sing-box is already up to date"
+		exit 0
+	fi
 	arch=$(uname -m)
 	case "$arch" in
 		x86_64|amd64) asset_arch=amd64 ;;
@@ -26,6 +30,10 @@ singbox)
 	/etc/init.d/sing-box start >/dev/null 2>&1
 	;;
 sbx)
+	if /usr/bin/sbx-luci-version sbx | grep -q '"update_available":false'; then
+		echo "SBX/OpenWrt is already up to date"
+		exit 0
+	fi
 	latest=$(/usr/bin/sbx-luci-version sbx | sed -n 's/.*"latest":"v\([0-9.]*\)".*/\1/p')
 	[ -n "$latest" ] || { echo "unable to determine latest OpenWrt release" >&2; exit 1; }
 	url="${SBX_OPENWRT_PACKAGE_URL:-https://github.com/driftbottle61/sbx/releases/download/openwrt-v${latest}/luci-app-sbx-x86_64.apk}"

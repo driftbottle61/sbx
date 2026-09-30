@@ -20,7 +20,22 @@ LuCI 页面包含五个标签页：
 make package/luci-app-sbx/compile V=s
 ```
 
-包依赖包括 LuCI、curl、unzip、ca-bundle、jsonfilter、nftables、TUN 和 nftables TProxy 内核模块。
+包依赖包括 LuCI、curl、unzip、ca-bundle、nftables、TUN 和 nftables TProxy 内核模块。
+
+## 发布与升级
+
+OpenWrt/ImmortalWrt 插件使用独立发布通道，不复用 Linux 版 SBX 的 `v1.x` Release。
+
+- 发布标签格式为 `openwrt-v版本号`，例如 `openwrt-v0.2.4`。
+- GitHub Release 资产固定包含 `luci-app-sbx-x86_64.apk`。
+- 兼容旧版 opkg 的安装包命名为 `luci-app-sbx_版本-1_x86_64.ipk`。
+- LuCI 页面里的 SBX/OpenWrt 版本检测只读取 `openwrt-v*` Release，不读取 Linux 版 `v1.x` Release。
+- 当远程 OpenWrt 插件版本高于本地 `luci-app-sbx` 包版本时，最新版后方的“更新”按钮会启用；没有更新时按钮保持禁用，避免重复安装。
+- 点击“更新”会下载对应 `openwrt-v*` Release 下的 APK，并执行 `apk add --allow-untrusted` 升级。
+
+sing-box 使用独立版本检测与更新逻辑：页面只读取 `SagerNet/sing-box` 官方 Release，并根据设备架构下载 Linux musl 包。更新前会先用当前配置执行 `sing-box check`，校验通过后才替换二进制并重启服务；没有更新时按钮保持禁用。
+
+在测试机上已验证从 `v0.2.2` 通过 LuCI 更新按钮升级到 `v0.2.4`，升级后本地版本与最新版一致，更新按钮自动隐藏。
 
 ## 模式切换
 

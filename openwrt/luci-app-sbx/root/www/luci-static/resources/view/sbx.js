@@ -131,6 +131,11 @@ return view.extend({
 			button.addEventListener('click', function() {
 				var kind = button.dataset.updateKind;
 				var result = root.querySelector('[data-update-result="' + kind + '"]');
+				if (button.disabled || button.dataset.updateAvailable !== 'true') {
+					result.className = 'sbx-result';
+					result.textContent = _('当前已是最新版');
+					return;
+				}
 				button.disabled = true;
 				result.className = 'sbx-result';
 				result.textContent = _('正在更新…');
@@ -173,9 +178,9 @@ function statusPane(status) {
 	return E('div', { 'class': 'sbx-card' }, [
 		E('div', { 'class': 'sbx-grid' }, [
 			E('label', {}, _('sing-box 版本')), E('span', { 'data-status': 'version' }, status.version || '-'),
-			E('label', {}, _('sing-box 最新版')), E('div', { 'class': 'sbx-inline-update' }, [E('span', { 'data-version': 'latest-singbox' }, _('查询中…')), E('button', { 'data-update-kind': 'singbox', 'class': 'cbi-button cbi-button-action', 'hidden': true }, _('更新')), E('span', { 'data-update-result': 'singbox', 'class': 'sbx-result' })]),
+			E('label', {}, _('sing-box 最新版')), E('div', { 'class': 'sbx-inline-update' }, [E('span', { 'data-version': 'latest-singbox' }, _('查询中…')), E('button', { 'data-update-kind': 'singbox', 'data-update-available': 'false', disabled: true, 'class': 'cbi-button cbi-button-action' }, _('更新')), E('span', { 'data-update-result': 'singbox', 'class': 'sbx-result' })]),
 			E('label', {}, _('SBX/OpenWrt 版本')), E('span', { 'data-version': 'local-sbx' }, _('查询中…')),
-			E('label', {}, _('SBX/OpenWrt 最新版')), E('div', { 'class': 'sbx-inline-update' }, [E('span', { 'data-version': 'latest-sbx' }, _('查询中…')), E('button', { 'data-update-kind': 'sbx', 'class': 'cbi-button cbi-button-action', 'hidden': true }, _('更新')), E('span', { 'data-update-result': 'sbx', 'class': 'sbx-result' })]),
+			E('label', {}, _('SBX/OpenWrt 最新版')), E('div', { 'class': 'sbx-inline-update' }, [E('span', { 'data-version': 'latest-sbx' }, _('查询中…')), E('button', { 'data-update-kind': 'sbx', 'data-update-available': 'false', disabled: true, 'class': 'cbi-button cbi-button-action' }, _('更新')), E('span', { 'data-update-result': 'sbx', 'class': 'sbx-result' })]),
 			E('label', {}, _('运行状态')), E('span', { 'data-status': 'running' }, status.running ? _('运行中') : _('已停止')),
 			E('label', {}, _('CPU 占用')), E('span', { 'data-status': 'cpu' }, (status.cpu || '0') + '%'),
 			E('label', {}, _('内存占用')), E('span', { 'data-status': 'memory' }, (status.memory || '0') + '%'),
@@ -230,6 +235,9 @@ function updateVersion(root, kind, value) {
 		if (local) local.textContent = version.local || '-';
 		if (latest) latest.textContent = version.latest || '-';
 		var button = root.querySelector('[data-update-kind="' + kind + '"]');
-		if (button) button.hidden = !version.update_available;
+		if (button) {
+			button.disabled = !version.update_available;
+			button.dataset.updateAvailable = version.update_available ? 'true' : 'false';
+		}
 	} catch (e) {}
 }
