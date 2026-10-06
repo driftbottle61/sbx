@@ -6,6 +6,10 @@
 
 ## 本版本
 
+当前打包修订：`0.3.0-r4`
+
+- `0.3.0-r4` 修复 SBX 版本检查对 OpenWrt release tag 的识别。
+
 - 标准化 ImmortalWrt/OpenWrt LuCI 插件目录与 Makefile。
 - 支持 TUN、TProxy 和 proxy-only 模式的事务式切换。
 - 配置下载前执行 sing-box 校验和模式类型校验。
