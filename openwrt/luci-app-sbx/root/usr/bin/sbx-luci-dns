@@ -1,0 +1,41 @@
+#!/bin/sh
+
+json_escape() { sed 's/\\/\\\\/g;s/"/\\"/g'; }
+config=$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)
+plain=''; secure=''; dns_in=''; hijack=false; risk=low; notes=''
+
+if command -v jsonfilter >/dev/null 2>&1 && [ -f "$config" ]; then
+	plain=$(jsonfilter -q -i "$config" -e '@.dns.servers[@.type="udp"].server' 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+	secure=$(jsonfilter -q -i "$config" -e '@.dns.servers[@.type="https"].server' -e '@.dns.servers[@.type="tls"].server' 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+	dns_in=$(jsonfilter -q -i "$config" -e '@.inbounds[@.tag="dns-in"].listen_port' 2>/dev/null | head -n1)
+fi
+
+if nft list table inet dnsmasq 2>/dev/null | grep -q 'udp dport 53.*redirect'; then
+	hijack=true
+fi
+
+plain_count=0
+secure_count=0
+[ -n "$plain" ] && plain_count=$(printf '%s\n' "$plain" | awk '{print NF}')
+[ -n "$secure" ] && secure_count=$(printf '%s\n' "$secure" | awk '{print NF}')
+
+if [ "$plain_count" -gt 0 ]; then
+	risk=medium
+	notes="plain UDP upstream detected"
+fi
+if [ "$hijack" != true ]; then
+	risk=high
+	[ -n "$notes" ] && notes="$notes; "
+	notes="${notes}DNS port 53 hijack not detected"
+fi
+
+printf '{'
+printf '"risk":"%s",' "$risk"
+printf '"dns_in_port":"%s",' "$(printf '%s' "$dns_in" | json_escape)"
+printf '"plain_upstreams":"%s",' "$(printf '%s' "$plain" | json_escape)"
+printf '"secure_upstreams":"%s",' "$(printf '%s' "$secure" | json_escape)"
+printf '"plain_count":%s,' "$plain_count"
+printf '"secure_count":%s,' "$secure_count"
+printf '"dnsmasq_hijack":%s,' "$hijack"
+printf '"notes":"%s"' "$(printf '%s' "$notes" | json_escape)"
+printf '}\n'

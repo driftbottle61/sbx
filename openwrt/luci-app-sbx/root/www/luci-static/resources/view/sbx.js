@@ -10,14 +10,21 @@ return view.extend({
 			uci.load('sbx'),
 			fs.exec_direct('/usr/bin/sbx-luci-status'),
 			fs.exec_direct('/usr/bin/sbx-zashboard', [ 'status' ]),
+			fs.exec_direct('/usr/bin/sbx-luci-health'),
+			fs.exec_direct('/usr/bin/sbx-luci-dns'),
+			fs.exec_direct('/usr/bin/sbx-luci-backup', [ 'list' ]),
 			fs.read('/etc/sing-box/config.json')
 		]);
 	},
 
 	render: function(data) {
-		var status = {}, panel = {};
+		var status = {}, panel = {}, health = {}, dns = {};
 		try { status = JSON.parse(commandOutput(data[1]) || '{}'); } catch (e) {}
 		try { panel = JSON.parse(commandOutput(data[2]) || '{}'); } catch (e) {}
+		try { health = JSON.parse(commandOutput(data[3]) || '{}'); } catch (e) {}
+		try { dns = JSON.parse(commandOutput(data[4]) || '{}'); } catch (e) {}
+		var backups = [];
+		try { backups = JSON.parse(commandOutput(data[5]) || '[]'); } catch (e) {}
 
 		var root = E('div', { 'class': 'cbi-map' }, [
 			E('h2', {}, _('SBX')),
@@ -36,10 +43,10 @@ return view.extend({
 				E('button', { name: 'sbx-stop', 'class': 'cbi-button' }, _('停止')),
 				E('span', { name: 'sbx-service-result', 'class': 'sbx-result' })
 			]),
-			E('div', { 'class': 'sbx-pane active', 'data-pane': 'status' }, statusPane(status)),
+			E('div', { 'class': 'sbx-pane active', 'data-pane': 'status' }, statusPane(status, health, dns, backups)),
 			E('div', { 'class': 'sbx-pane', 'data-pane': 'config' }, configPane()),
 			E('div', { 'class': 'sbx-pane', 'data-pane': 'panel' }, panelPane(panel)),
-			E('div', { 'class': 'sbx-pane', 'data-pane': 'current' }, currentPane(data[3])),
+			E('div', { 'class': 'sbx-pane', 'data-pane': 'current' }, currentPane(data[6])),
 			E('div', { 'class': 'sbx-pane', 'data-pane': 'logs' }, logsPane())
 		]);
 
@@ -105,6 +112,18 @@ return view.extend({
 		}
 		root.querySelector('[name="sbx-start"]').addEventListener('click', function() { serviceAction('start'); });
 		root.querySelector('[name="sbx-stop"]').addEventListener('click', function() { serviceAction('stop'); });
+		root.querySelectorAll('[data-backup-restore]').forEach(function(button) {
+			button.addEventListener('click', function() {
+				button.disabled = true;
+				fs.exec_direct('/usr/bin/sbx-luci-backup', [ 'restore', button.dataset.backupRestore ]).then(function(value) {
+					var error = commandError(value);
+					var result = button.parentNode.querySelector('.sbx-result');
+					if (result) result.textContent = error ? _('恢复失败：') + error : _('恢复成功');
+					button.disabled = false;
+					if (!error) refresh();
+				}).catch(function(error) { button.disabled = false; });
+			});
+		});
 
 		var save = root.querySelector('[name="sbx-save-config"]');
 		save.addEventListener('click', function() {
@@ -153,11 +172,15 @@ return view.extend({
 		});
 		function refresh() {
 			return Promise.all([
-				fs.exec_direct('/usr/bin/sbx-luci-status'),
-				fs.exec_direct('/usr/bin/sbx-luci-action', [ 'log' ])
-			]).then(function(values) {
-				try { updateStatus(root, JSON.parse(commandOutput(values[0]) || '{}')); } catch (e) {}
-				var logText = commandOutput(values[1]);
+			fs.exec_direct('/usr/bin/sbx-luci-status'),
+			fs.exec_direct('/usr/bin/sbx-luci-health'),
+			fs.exec_direct('/usr/bin/sbx-luci-dns'),
+			fs.exec_direct('/usr/bin/sbx-luci-action', [ 'log' ])
+		]).then(function(values) {
+			try { updateStatus(root, JSON.parse(commandOutput(values[0]) || '{}')); } catch (e) {}
+			try { updateHealth(root, JSON.parse(commandOutput(values[1]) || '{}')); } catch (e) {}
+			try { updateDns(root, JSON.parse(commandOutput(values[2]) || '{}')); } catch (e) {}
+			var logText = commandOutput(values[3]);
 				if (logBox && logText) { logBox.textContent = logText; logBox.scrollTop = logBox.scrollHeight; }
 			});
 		}
@@ -173,15 +196,35 @@ function commandOutput(value) {
 	return typeof value === 'string' ? value : '';
 }
 
-function statusPane(status) {
+function statusPane(status, health, dns, backups) {
 	var mode = status.mode || 'proxy-only';
+	var overall = health.overall || '-';
 	return E('div', { 'class': 'sbx-card' }, [
 		E('div', { 'class': 'sbx-status-grid' }, [
 			metricCard(_('运行状态'), E('span', { 'data-status': 'running', 'class': status.running ? 'sbx-running' : 'sbx-stopped' }, status.running ? _('运行中') : _('已停止'))),
 			metricCard(_('运行模式'), mode === 'tun' ? 'TUN' : mode === 'tproxy' ? 'TProxy' : _('仅 SOCKS/HTTP')),
+			metricCard(_('健康状态'), E('span', { 'data-health': 'overall', 'class': overall === 'ok' ? 'sbx-running' : 'sbx-stopped' }, overall)),
+			metricCard(_('DNS 风险'), E('span', { 'data-dns': 'risk' }, dns.risk || health.dns_risk || '-')),
 			metricCard(_('CPU 占用'), E('span', { 'data-status': 'cpu' }, (status.cpu || '0') + '%')),
 			metricCard(_('内存占用'), E('span', { 'data-status': 'memory' }, (status.memory || '0') + '%'))
 		]),
+		E('div', { 'class': 'sbx-section-title' }, _('健康详情')),
+		E('div', { 'class': 'sbx-grid' }, [
+			E('label', {}, _('配置校验')), E('span', { 'data-health': 'config-ok' }, health.config_ok ? _('通过') : _('异常')),
+			E('label', {}, _('路由策略')), E('span', { 'data-health': 'route-ok' }, health.route_ok ? _('正常') : _('异常')),
+			E('label', {}, _('入站类型')), E('span', { 'data-health': 'inbounds' }, health.inbounds || '-'),
+			E('label', {}, _('路由说明')), E('span', { 'data-health': 'route-notes' }, health.route_notes || '-'),
+			E('label', {}, _('DNS 提示')), E('span', { 'data-health': 'dns-notes' }, health.dns_notes || '-')
+		]),
+		E('div', { 'class': 'sbx-section-title' }, _('DNS 审计')),
+		E('div', { 'class': 'sbx-grid' }, [
+			E('label', {}, _('sing-box DNS 入站')), E('span', { 'data-dns': 'in-port' }, dns.dns_in_port ? ':' + dns.dns_in_port : _('未检测到')),
+			E('label', {}, _('明文 UDP 上游')), E('span', { 'data-dns': 'plain' }, dns.plain_upstreams || _('无')),
+			E('label', {}, _('加密上游')), E('span', { 'data-dns': 'secure' }, dns.secure_upstreams || _('无')),
+			E('label', {}, _('DNS 53 劫持')), E('span', { 'data-dns': 'hijack' }, dns.dnsmasq_hijack ? _('已检测到') : _('未检测到')),
+			E('label', {}, _('DNS 审计说明')), E('span', { 'data-dns': 'notes' }, dns.notes || _('无'))
+		]),
+		E('p', { 'class': 'sbx-version-meta' }, _('配置失败时会自动回滚；默认保留最近 5 份配置备份。')),
 		E('div', { 'class': 'sbx-section-title' }, _('版本信息')),
 		E('div', { 'class': 'sbx-version-list' }, [
 			versionRow('sing-box', E('span', { 'data-status': 'version', 'data-version': 'local-singbox' }, status.version || '-'), E('span', { 'data-version': 'latest-singbox' }, _('查询中…')), 'singbox'),
@@ -196,7 +239,15 @@ function statusPane(status) {
 			]),
 			E('button', { name: 'sbx-apply', 'class': 'cbi-button cbi-button-action' }, _('应用并重启')),
 			E('span', { name: 'sbx-action-result', 'class': 'sbx-result' })
-		])
+		]),
+		E('div', { 'class': 'sbx-section-title' }, _('配置备份与回滚')),
+		backups && backups.length ? E('div', { 'class': 'sbx-version-list' }, backups.map(function(item) {
+			return E('div', { 'class': 'sbx-version-row' }, [
+				E('span', { 'class': 'sbx-version-name' }, item.name),
+				E('span', { 'class': 'sbx-version-meta' }, item.size + ' bytes'),
+				E('span', {}, [E('button', { 'class': 'cbi-button', 'data-backup-restore': item.name }, _('恢复')), E('span', { 'class': 'sbx-result' })])
+			]);
+		})) : E('p', { 'class': 'sbx-version-meta' }, _('暂无配置备份；完成一次模式切换后会自动生成。'))
 	]);
 }
 
@@ -247,6 +298,37 @@ function updateStatus(root, status) {
 	Object.keys(values).forEach(function(key) { var node = root.querySelector('[data-status="' + key + '"]'); if (node) node.textContent = values[key]; });
 	var top = root.querySelector('[data-status="top-running"]');
 	if (top) { top.textContent = status.running ? 'running' : 'stopped'; top.className = status.running ? 'sbx-running' : 'sbx-stopped'; }
+}
+function updateHealth(root, health) {
+	var values = {
+		'overall': health.overall || '-',
+		'dns-risk': health.dns_risk || '-',
+		'config-ok': health.config_ok ? _('通过') : _('异常'),
+		'route-ok': health.route_ok ? _('正常') : _('异常'),
+		'inbounds': health.inbounds || '-',
+		'route-notes': health.route_notes || '-',
+		'dns-notes': health.dns_notes || '-'
+	};
+	Object.keys(values).forEach(function(key) {
+		var node = root.querySelector('[data-health="' + key + '"]');
+		if (node) node.textContent = values[key];
+	});
+	var overall = root.querySelector('[data-health="overall"]');
+	if (overall) overall.className = health.overall === 'ok' ? 'sbx-running' : 'sbx-stopped';
+}
+function updateDns(root, dns) {
+	var values = {
+		'risk': dns.risk || '-',
+		'in-port': dns.dns_in_port ? ':' + dns.dns_in_port : _('未检测到'),
+		'plain': dns.plain_upstreams || _('无'),
+		'secure': dns.secure_upstreams || _('无'),
+		'hijack': dns.dnsmasq_hijack ? _('已检测到') : _('未检测到'),
+		'notes': dns.notes || _('无')
+	};
+	Object.keys(values).forEach(function(key) {
+		var node = root.querySelector('[data-dns="' + key + '"]');
+		if (node) node.textContent = values[key];
+	});
 }
 function updateVersion(root, kind, value) {
 	try {

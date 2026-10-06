@@ -9,6 +9,12 @@
       },
       "file": {
         "/usr/bin/sbx-luci-status": [ "exec" ],
+        "/usr/bin/sbx-luci-transaction tun": [ "exec" ],
+        "/usr/bin/sbx-luci-transaction tproxy": [ "exec" ],
+        "/usr/bin/sbx-luci-transaction proxy-only": [ "exec" ],
+        "/usr/bin/sbx-luci-health": [ "exec" ],
+        "/usr/bin/sbx-luci-backup list": [ "exec" ],
+        "/usr/bin/sbx-luci-dns": [ "exec" ],
         "/usr/bin/sbx-luci-version singbox": [ "exec" ],
         "/usr/bin/sbx-luci-version sbx": [ "exec" ],
         "/usr/bin/sbx-luci-action check": [ "exec" ],
@@ -55,6 +61,7 @@
         ,"/usr/bin/sbx-luci-sync": [ "exec" ]
         ,"/usr/bin/sbx-luci-route apply": [ "exec" ]
         ,"/usr/bin/sbx-luci-route clear": [ "exec" ]
+        ,"/usr/bin/sbx-luci-backup restore": [ "exec" ]
         ,"/usr/bin/sbx-zashboard install": [ "exec" ]
         ,"/usr/bin/sbx-zashboard update": [ "exec" ]
         ,"/usr/bin/sbx-luci-action update-singbox": [ "exec" ]

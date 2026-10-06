@@ -1,0 +1,67 @@
+#!/bin/sh
+set -eu
+
+profile="${1:-$(uci -q get sbx.main.config_profile || echo proxy-only)}"
+config_file=$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)
+backup_dir=/etc/sing-box/sbx-backups
+mkdir -p "$backup_dir"
+
+case "$profile" in
+	tun) url=$(uci -q get sbx.main.tun_config_url || echo '') ;;
+	tproxy) url=$(uci -q get sbx.main.tproxy_config_url || echo '') ;;
+	proxy-only) url='' ;;
+	*) echo "invalid mode: $profile" >&2; exit 2 ;;
+esac
+
+old_mode=$(uci -q get sbx.main.mode || echo proxy-only)
+old_profile=$(uci -q get sbx.main.config_profile || echo "$old_mode")
+old_active=$(uci -q get sbx.main.active_config_url || echo '')
+stamp=$(date +%Y%m%d-%H%M%S 2>/dev/null || date +%s)
+backup_config="$backup_dir/config.$stamp.json"
+[ -f "$config_file" ] && cp "$config_file" "$backup_config"
+
+rollback() {
+	[ -f "$backup_config" ] && cp "$backup_config" "$config_file"
+	uci set sbx.main.mode="$old_mode"
+	uci set sbx.main.config_profile="$old_profile"
+	uci set sbx.main.active_config_url="$old_active"
+	uci commit sbx
+	/usr/bin/sbx-luci-route clear >/dev/null 2>&1 || true
+	/etc/init.d/sing-box restart >/dev/null 2>&1 || true
+	/usr/bin/sbx-luci-route apply >/dev/null 2>&1 || true
+}
+
+if [ "$profile" != proxy-only ]; then
+	[ -n "$url" ] || { echo "no config URL configured for $profile mode" >&2; exit 1; }
+	/usr/bin/sbx-luci-sync "$profile" "$url" || { rollback; echo "configuration download/validation failed; rolled back" >&2; exit 1; }
+else
+	uci set sbx.main.mode=proxy-only
+	uci set sbx.main.config_profile=proxy-only
+	uci set sbx.main.active_config_url=''
+	uci commit sbx
+fi
+
+/usr/bin/sbx-luci-route clear >/dev/null 2>&1 || true
+/etc/init.d/sing-box restart >/dev/null 2>&1 || { rollback; echo "sing-box restart failed; rolled back" >&2; exit 1; }
+/usr/bin/sbx-luci-route apply || { rollback; echo "route policy setup failed; rolled back" >&2; exit 1; }
+
+health=''
+tries=0
+while :; do
+	health=$(/usr/bin/sbx-luci-health)
+	case "$health" in
+		*'"config_ok":true'*'"route_ok":true'*) break ;;
+	esac
+	tries=$((tries + 1))
+	[ "$tries" -lt 15 ] || { rollback; echo "health check failed; rolled back" >&2; echo "$health" >&2; exit 1; }
+	sleep 1
+done
+
+keep=$(uci -q get sbx.main.backup_keep || echo 5)
+case "$keep" in ''|*[!0-9]*) keep=5 ;; esac
+ls -1t "$backup_dir"/config.*.json 2>/dev/null | tail -n +$((keep + 1)) | while IFS= read -r old_backup; do
+	[ -n "$old_backup" ] && rm -f "$old_backup"
+done
+
+printf 'applied mode=%s and restarted sing-box\n' "$profile"
+/usr/bin/sbx-luci-status

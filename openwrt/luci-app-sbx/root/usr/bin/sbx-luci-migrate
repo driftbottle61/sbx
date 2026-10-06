@@ -1,0 +1,60 @@
+#!/bin/sh
+
+# Keep package upgrades non-destructive: migrate only missing keys and never
+# replace a user supplied configuration URL or mode.
+set -u
+
+config=/etc/config/sbx
+state_dir=/etc/sbx
+state_file="$state_dir/migration.version"
+target_version=0.3.0
+
+mkdir -p "$state_dir"
+
+uci_get() {
+	uci -q get "sbx.main.$1" 2>/dev/null || true
+}
+
+mode=$(uci_get mode)
+[ -n "$mode" ] || mode=proxy-only
+case "$mode" in
+	tun|tproxy|proxy-only) ;;
+	*) mode=proxy-only ;;
+esac
+
+profile=$(uci_get config_profile)
+case "$profile" in
+	tun|tproxy|proxy-only) ;;
+	*) profile="$mode" ;;
+esac
+
+# Older revisions used mode as the only selector. Preserve it as the source
+# of truth when config_profile is absent, then make both fields consistent.
+changed=0
+[ "$(uci_get mode)" = "$mode" ] || { uci set sbx.main.mode="$mode"; changed=1; }
+[ "$(uci_get config_profile)" = "$profile" ] || { uci set sbx.main.config_profile="$profile"; changed=1; }
+
+active=$(uci_get active_config_url)
+if [ -z "$active" ]; then
+	case "$profile" in
+		tun) active=$(uci_get tun_config_url) ;;
+		tproxy) active=$(uci_get tproxy_config_url) ;;
+		*) active='' ;;
+	esac
+	uci set sbx.main.active_config_url="$active"
+	changed=1
+fi
+
+backup=""
+if [ "$changed" -eq 1 ] && [ -f "$config" ]; then
+	stamp=$(date +%Y%m%d-%H%M%S 2>/dev/null || date +%s)
+	backup="$state_dir/sbx.pre-migration.$stamp"
+	cp "$config" "$backup" 2>/dev/null || backup=''
+	uci commit sbx
+fi
+
+printf 'version=%s\nmode=%s\nprofile=%s\nchanged=%s\n' \
+	"$target_version" "$mode" "$profile" "$changed" > "$state_file"
+[ -z "$backup" ] || printf 'backup=%s\n' "$backup" >> "$state_file"
+
+exit 0

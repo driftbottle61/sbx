@@ -11,6 +11,8 @@ if [ -n "$pid" ]; then
 fi
 mem="$(awk '/MemTotal:/{t=$2}/MemAvailable:/{a=$2}END{if(t)printf "%.1f",(t-a)*100/t; else print "0"}' /proc/meminfo 2>/dev/null)"
 mode="$(uci -q get sbx.main.mode || echo proxy-only)"
+sbx_version="0.3.0"
+[ -r /etc/sbx-version ] && sbx_version="$(sed -n 's/^version=//p' /etc/sbx-version | head -n1)"
 
-printf '{"running":%s,"pid":%s,"version":"%s","sbx_version":"0.1.0","mode":"%s","cpu":"%s","memory":"%s","rss":"%s","socks_port":1080,"http_port":8080}\n' \
-	"$running" "$pid" "$version" "$mode" "$cpu" "$mem" "$rss"
+printf '{"running":%s,"pid":%s,"version":"%s","sbx_version":"%s","mode":"%s","cpu":"%s","memory":"%s","rss":"%s","socks_port":1080,"http_port":8080}\n' \
+	"$running" "$pid" "$version" "$sbx_version" "$mode" "$cpu" "$mem" "$rss"

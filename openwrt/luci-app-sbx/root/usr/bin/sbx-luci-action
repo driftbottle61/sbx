@@ -14,41 +14,7 @@ case "$action" in
 		/usr/bin/sbx-luci-action update-restart "$profile"
 		;;
 	update-restart)
-		profile="${2:-$(uci -q get sbx.main.config_profile || echo "")}"
-		case "$profile" in
-			tun) url="$(uci -q get sbx.main.tun_config_url || echo "")" ;;
-			tproxy) url="$(uci -q get sbx.main.tproxy_config_url || echo "")" ;;
-			proxy-only) url="" ;;
-			*) url="" ;;
-		esac
-		case "$profile" in
-			tun)
-				[ -n "$url" ] || { echo "no config URL configured for tun mode" >&2; exit 1; }
-				;;
-			tproxy)
-				[ -n "$url" ] || { echo "no config URL configured for tproxy mode" >&2; exit 1; }
-				;;
-			proxy-only)
-				uci set sbx.main.mode='proxy-only'
-				uci set sbx.main.config_profile='proxy-only'
-				uci set sbx.main.active_config_url=''
-				uci commit sbx
-				/usr/bin/sbx-luci-route clear >/dev/null 2>&1 || true
-				/etc/init.d/sing-box restart >/dev/null 2>&1
-				/usr/bin/sbx-luci-status
-				exit 0
-				;;
-			*)
-				echo "please choose config profile: tun or tproxy" >&2
-				exit 1
-				;;
-		esac
-		/usr/bin/sbx-luci-sync "$profile" "$url" || { echo "selected configuration download/validation failed" >&2; exit 1; }
-		/usr/bin/sbx-luci-route clear >/dev/null 2>&1 || true
-		/etc/init.d/sing-box restart >/dev/null 2>&1
-		/usr/bin/sbx-luci-route apply || { echo "route policy setup failed" >&2; exit 1; }
-		printf 'applied mode=%s and restarted sing-box\n' "$profile"
-		/usr/bin/sbx-luci-status
+		/usr/bin/sbx-luci-transaction "${2:-$(uci -q get sbx.main.config_profile || echo proxy-only)}"
 		;;
 	start|stop|restart|reload|status)
 		if [ "$action" = "stop" ]; then

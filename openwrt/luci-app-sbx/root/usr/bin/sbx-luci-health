@@ -1,0 +1,93 @@
+#!/bin/sh
+
+json_escape() { sed 's/\\/\\\\/g;s/"/\\"/g'; }
+has_line() { grep -q "$1" 2>/dev/null; }
+
+mode=$(uci -q get sbx.main.mode || echo proxy-only)
+config=$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)
+lan_if=$(uci -q get sbx.main.lan_interface || echo br-lan)
+tproxy_table=$(uci -q get sbx.main.tproxy_table || echo 100)
+tun_table=$(uci -q get sbx.main.tun_table || echo 101)
+tproxy_port=$(uci -q get sbx.main.tproxy_port || echo 7895)
+pid=$(pidof sing-box 2>/dev/null | awk '{print $1}')
+
+running=false; [ -n "$pid" ] && running=true
+config_ok=false
+/usr/bin/sing-box check -c "$config" >/tmp/sbx-health-check.out 2>&1 && config_ok=true
+
+inbounds=""
+tun_if=""
+config_tproxy_port=""
+plain_dns=""
+if command -v jsonfilter >/dev/null 2>&1 && [ -f "$config" ]; then
+	inbounds=$(jsonfilter -q -i "$config" -e '@.inbounds[*].type' 2>/dev/null | tr '\n' ' ')
+	tun_if=$(jsonfilter -q -i "$config" -e '@.inbounds[@.type="tun"].interface_name' 2>/dev/null | head -n1)
+	config_tproxy_port=$(jsonfilter -q -i "$config" -e '@.inbounds[@.type="tproxy"].listen_port' 2>/dev/null | head -n1)
+	plain_dns=$(jsonfilter -q -i "$config" -e '@.dns.servers[@.type="udp"].server' 2>/dev/null | tr '\n' ' ')
+fi
+
+route_ok=false
+route_notes=""
+case "$mode" in
+	tun)
+		if [ -n "$tun_if" ] && ip link show "$tun_if" >/dev/null 2>&1 && \
+			ip rule show | grep -q "iif $lan_if lookup $tun_table" && \
+			ip route show table "$tun_table" | grep -q "default dev $tun_if" && \
+			! nft list table inet sbx >/dev/null 2>&1; then
+			route_ok=true
+			route_notes="TUN: $lan_if inbound traffic -> table $tun_table -> $tun_if"
+		else
+			route_notes="TUN policy should have iif $lan_if lookup $tun_table and default dev ${tun_if:-unknown}; nft sbx should be absent"
+		fi
+		;;
+	tproxy)
+		[ -n "$config_tproxy_port" ] && tproxy_port="$config_tproxy_port"
+		if netstat -lntup 2>/dev/null | grep -q ":$tproxy_port .*sing-box" && \
+			ip rule show | grep -q "fwmark .* lookup $tproxy_table" && \
+			ip route show table "$tproxy_table" | grep -q 'local default dev lo' && \
+			nft list table inet sbx 2>/dev/null | grep -q "127.0.0.1:$tproxy_port"; then
+			route_ok=true
+			route_notes="TProxy: $lan_if TCP/UDP -> 127.0.0.1:$tproxy_port; fwmark -> table $tproxy_table"
+		else
+			route_notes="TProxy policy should listen on $tproxy_port, fwmark lookup $tproxy_table, local default dev lo and nft tproxy rule"
+		fi
+		;;
+	proxy-only)
+		if ! ip rule show | grep -q "lookup $tproxy_table\|lookup $tun_table" && ! nft list table inet sbx >/dev/null 2>&1; then
+			route_ok=true
+			route_notes="Proxy-only: transparent route policies are disabled"
+		else
+			route_notes="proxy-only should not keep transparent proxy route rules"
+		fi
+		;;
+esac
+
+dns_risk=low
+dns_notes=""
+if [ -n "$plain_dns" ]; then
+	dns_risk=medium
+	dns_notes="sing-box config contains plain UDP DNS upstream(s): $plain_dns"
+fi
+if netstat -lntup 2>/dev/null | grep -q ':53 .*dnsmasq'; then
+	if [ -n "$dns_notes" ]; then dns_notes="$dns_notes; "; fi
+	dns_notes="${dns_notes}dnsmasq is listening on :53, verify upstream and hijack policy"
+fi
+
+overall=ok
+[ "$running" = true ] || overall=fail
+[ "$config_ok" = true ] || overall=fail
+[ "$route_ok" = true ] || overall=warn
+
+printf '{'
+printf '"overall":"%s",' "$overall"
+printf '"running":%s,' "$running"
+printf '"config_ok":%s,' "$config_ok"
+printf '"route_ok":%s,' "$route_ok"
+printf '"mode":"%s",' "$(printf '%s' "$mode" | json_escape)"
+printf '"inbounds":"%s",' "$(printf '%s' "$inbounds" | json_escape)"
+printf '"tun_interface":"%s",' "$(printf '%s' "$tun_if" | json_escape)"
+printf '"tproxy_port":"%s",' "$(printf '%s' "$tproxy_port" | json_escape)"
+printf '"route_notes":"%s",' "$(printf '%s' "$route_notes" | json_escape)"
+printf '"dns_risk":"%s",' "$dns_risk"
+printf '"dns_notes":"%s"' "$(printf '%s' "$dns_notes" | json_escape)"
+printf '}\n'

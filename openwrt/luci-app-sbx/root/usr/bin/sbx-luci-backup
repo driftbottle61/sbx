@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+dir=/etc/sing-box/sbx-backups
+config=$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)
+mkdir -p "$dir"
+case "${1:-list}" in
+list)
+ first=1; printf '['
+ for file in $(ls -1t "$dir"/config.*.json 2>/dev/null | sed "s#^$dir/##"); do
+  [ "$first" -eq 1 ] || printf ','; first=0
+  size=$(wc -c < "$dir/$file" | tr -d ' ')
+  printf '{"name":"%s","size":%s}' "$file" "$size"
+ done
+ printf ']\n'
+ ;;
+restore)
+ name=${2:-}
+ case "$name" in config.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].json) ;; *) echo 'invalid backup name' >&2; exit 2 ;; esac
+ backup="$dir/$name"; [ -s "$backup" ] || { echo 'backup not found' >&2; exit 1; }
+ old="$dir/config.rollback.$(date +%Y%m%d-%H%M%S).json"; [ -f "$config" ] && cp "$config" "$old"
+ cp "$backup" "$config"
+ /usr/bin/sing-box check -c "$config" >/dev/null 2>&1 || { [ -f "$old" ] && cp "$old" "$config"; echo 'sing-box check failed' >&2; exit 1; }
+ /etc/init.d/sing-box restart >/dev/null 2>&1 || { [ -f "$old" ] && cp "$old" "$config"; exit 1; }
+ /usr/bin/sbx-luci-route apply >/dev/null 2>&1 || true
+ health=$(/usr/bin/sbx-luci-health 2>/dev/null || true)
+ case "$health" in *'"overall":"ok"'*) printf '%s\n' "$health" ;; *) [ -f "$old" ] && cp "$old" "$config"; /etc/init.d/sing-box restart >/dev/null 2>&1 || true; /usr/bin/sbx-luci-route apply >/dev/null 2>&1 || true; printf '%s\n' "$health" >&2; exit 1 ;; esac
+ ;;
+*) echo "usage: $0 {list|restore NAME}" >&2; exit 2 ;;
+esac
