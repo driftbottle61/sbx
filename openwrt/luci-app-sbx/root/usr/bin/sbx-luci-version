@@ -19,7 +19,10 @@ sbx)
     [ -n "$local" ] || local='unknown'
     local=${local%-r*}
     repo=''
-    latest=$(curl_text 'https://api.github.com/repos/driftbottle61/sbx/releases?per_page=100' 2>/dev/null | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\(openwrt-v[0-9.]*\)".*/\1/p' | sed 's/^openwrt-v//' | sort -V | tail -n1 || true)
+    # The OpenWrt package is published as a Git tag as well as a package
+    # artifact. Use tags so the checker also works before a GitHub Release is
+    # created for a revision.
+    latest=$(curl_text 'https://api.github.com/repos/driftbottle61/sbx/tags?per_page=100' 2>/dev/null | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\(openwrt-v[0-9.]*\)".*/\1/p' | sed 's/^openwrt-v//' | sort -V | tail -n1 || true)
     [ -n "$latest" ] || latest='unknown'
     cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
     printf '{"local":"v%s","latest":"v%s","update_available":%s,"update_kind":"sbx"}\n' "$local" "$latest" "$update"
