@@ -60,7 +60,7 @@ sbx)
 		echo "SBX/OpenWrt is already up to date"
 		exit 0
 	fi
-	latest=$(/usr/bin/sbx-luci-version sbx | sed -n 's/.*"latest":"v\([0-9.]*\)".*/\1/p')
+	latest=$(/usr/bin/sbx-luci-version sbx | sed -n 's/.*"latest":"v\([0-9.]*-r[0-9][0-9]*\)".*/\1/p')
 	[ -n "$latest" ] || { echo "unable to determine latest OpenWrt release" >&2; exit 1; }
 	release_tag="openwrt-v${latest}"
 	if [ -n "${SBX_OPENWRT_PACKAGE_URL:-}" ]; then
@@ -78,7 +78,7 @@ sbx)
 	fi
 	apk add --allow-untrusted "$file"
 	/etc/init.d/rpcd reload >/dev/null 2>&1 || /etc/init.d/rpcd restart >/dev/null 2>&1 || true
-	installed=$(apk info -a luci-app-sbx 2>/dev/null | sed -n 's/^luci-app-sbx-\([^ ]*\) description:.*/\1/p' | head -n1 | sed 's/-r[0-9]*$//')
+	installed=$(apk info -a luci-app-sbx 2>/dev/null | sed -n 's/^luci-app-sbx-\([^ ]*\) description:.*/\1/p' | head -n1)
 	[ "$installed" = "$latest" ] || { echo "installed version mismatch: expected $latest, got ${installed:-unknown}" >&2; exit 1; }
 	;;
 *) echo "usage: $0 {singbox|sbx}" >&2; exit 2 ;;
