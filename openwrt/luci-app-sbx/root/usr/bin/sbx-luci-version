@@ -13,7 +13,7 @@ curl_text() {
 }
 
 case "$kind" in
-singbox) local=$(/usr/bin/sing-box version 2>/dev/null | sed -n 's/.*sing-box version \([^ ]*\).*/\1/p'); repo='SagerNet/sing-box' ;;
+singbox) local=$(/usr/bin/sing-box version 2>/dev/null | sed -n 's/.*sing-box version \([^ ]*\).*/\1/p'); local=${local:-unknown}; repo='SagerNet/sing-box' ;;
 sbx)
     local=$(apk info -a luci-app-sbx 2>/dev/null | sed -n 's/^luci-app-sbx-\([^ ]*\) description:.*/\1/p' | head -n1 || true)
     [ -n "$local" ] || local='unknown'
@@ -34,4 +34,5 @@ latest=''
 [ -n "$repo" ] && latest=$(curl_text "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
 [ -n "$latest" ] || latest='unknown'
 cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
-printf '{"local":"v%s","latest":"%s","update_available":%s}\n' "$local" "$latest" "$update"
+case "$local" in unknown) local_json='unknown' ;; *) local_json="v$local" ;; esac
+printf '{"local":"%s","latest":"%s","update_available":%s}\n' "$local_json" "$latest" "$update"

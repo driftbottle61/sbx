@@ -10,13 +10,15 @@ service_prepare() {
 
 start_service() {
 	service_prepare || return 1
-	/etc/init.d/sing-box start >/dev/null 2>&1 || return 1
+	procd_open_instance
+	procd_set_param command /usr/bin/sing-box run -c "$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)"
+	procd_set_param respawn
+	procd_close_instance
 	/usr/bin/sbx-luci-route apply
 }
 
 stop_service() {
 	procd_kill
-	/etc/init.d/sing-box stop >/dev/null 2>&1 || true
 	/usr/bin/sbx-luci-route clear >/dev/null 2>&1 || true
 }
 

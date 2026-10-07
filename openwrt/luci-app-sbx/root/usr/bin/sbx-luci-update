@@ -45,10 +45,15 @@ singbox)
 	newbin="$tmpdir/sing-box"
 	tar -xzf "$archive" -O "$(tar -tzf "$archive" | grep '/sing-box$' | head -n1)" > "$newbin"
 	chmod 0755 "$newbin"
-	"$newbin" check -c "$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)" >/dev/null
-	/etc/init.d/sing-box stop >/dev/null 2>&1 || true
+	config="$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)"
+	if [ -f "$config" ]; then
+		"$newbin" check -c "$config" >/dev/null
+	fi
+	/etc/init.d/sbx stop >/dev/null 2>&1 || true
 	cp "$newbin" /usr/bin/sing-box
-	/etc/init.d/sing-box start >/dev/null 2>&1
+	if [ -f "$config" ]; then
+		/etc/init.d/sbx start >/dev/null 2>&1 || true
+	fi
 	;;
 sbx)
 	if /usr/bin/sbx-luci-version sbx | grep -q '"update_available":false'; then

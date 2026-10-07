@@ -27,7 +27,7 @@ rollback() {
 	uci set sbx.main.active_config_url="$old_active"
 	uci commit sbx
 	/usr/bin/sbx-luci-route clear >/dev/null 2>&1 || true
-	/etc/init.d/sing-box restart >/dev/null 2>&1 || true
+	/etc/init.d/sbx restart >/dev/null 2>&1 || true
 	/usr/bin/sbx-luci-route apply >/dev/null 2>&1 || true
 }
 
@@ -42,7 +42,7 @@ else
 fi
 
 /usr/bin/sbx-luci-route clear >/dev/null 2>&1 || true
-/etc/init.d/sing-box restart >/dev/null 2>&1 || { rollback; echo "sing-box restart failed; rolled back" >&2; exit 1; }
+/etc/init.d/sbx restart >/dev/null 2>&1 || { rollback; echo "sing-box restart failed; rolled back" >&2; exit 1; }
 /usr/bin/sbx-luci-route apply || { rollback; echo "route policy setup failed; rolled back" >&2; exit 1; }
 
 health=''
