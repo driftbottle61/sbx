@@ -2,6 +2,7 @@
 set -eu
 base=/www/zashboard
 meta="$base/.version"
+config_ui=/etc/singbox/ui
 tmp="/tmp/sbx-zashboard.$$"
 api='https://api.github.com/repos/Zephyruso/zashboard/releases/latest'
 cleanup() { rm -rf "$tmp"; }
@@ -11,6 +12,12 @@ status() {
   if [ -f "$meta" ] && [ -f "$base/index.html" ]; then
     v=$(cat "$meta")
     printf '{"installed":true,"version":"%s","url":"/zashboard/"}\n' "$(printf '%s' "$v" | json_escape)"
+  elif [ -f "$config_ui/index.html" ]; then
+    # sing-box can download/manage the UI itself through clash_api.external_ui.
+    # This is a valid installation even though it is not under /www/zashboard.
+    v="config-managed"
+    [ -f "$config_ui/.version" ] && v=$(cat "$config_ui/.version")
+    printf '{"installed":true,"version":"%s","url":"/ui/","source":"sing-box"}\n' "$(printf '%s' "$v" | json_escape)"
   else
     printf '{"installed":false,"version":null,"url":"/zashboard/"}\n'
   fi
