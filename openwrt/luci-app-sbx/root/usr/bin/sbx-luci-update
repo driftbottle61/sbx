@@ -76,7 +76,7 @@ sbx)
 	# Upgrade in place; never remove the working package before the new one is verified.
 	apk add --allow-untrusted --upgrade "$file"
 	/etc/init.d/rpcd reload >/dev/null 2>&1 || /etc/init.d/rpcd restart >/dev/null 2>&1 || true
-	installed=$(apk info -a luci-app-sbx 2>/dev/null | sed -n 's/^luci-app-sbx-\([^ ]*\) description:.*/\1/p' | head -n1)
+	installed=$(apk list --installed 2>/dev/null | sed -n 's/^luci-app-sbx-\([^ ]*\) .*/\1/p' | head -n1)
 	[ "$installed" = "$latest" ] || { echo "installed version mismatch: expected $latest, got ${installed:-unknown}" >&2; exit 1; }
 	;;
 *) echo "usage: $0 {singbox|sbx}" >&2; exit 2 ;;

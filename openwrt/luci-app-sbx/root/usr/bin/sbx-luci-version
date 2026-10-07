@@ -11,28 +11,39 @@ curl_text() {
 		curl -fsSL --connect-timeout 10 "$url"
 	fi
 }
+latest_redirect_tag() {
+
+	repo_name="$1"
+	curl -fsSIL --connect-timeout 10 "https://github.com/${repo_name}/releases/latest" 2>/dev/null |
+		sed -n 's#^[Ll]ocation: .*/tag/\([^[:space:]]*\).*#\1#p' | tail -n1
+}
 
 case "$kind" in
 singbox) local=$(/usr/bin/sing-box version 2>/dev/null | sed -n 's/.*sing-box version \([^ ]*\).*/\1/p'); local=${local:-unknown}; repo='SagerNet/sing-box' ;;
 sbx)
-    local=$(apk info -a luci-app-sbx 2>/dev/null | sed -n 's/^luci-app-sbx-\([^ ]*\) description:.*/\1/p' | head -n1 || true)
+    local=$(apk list --installed 2>/dev/null | sed -n 's/^luci-app-sbx-\([^ ]*\) .*/\1/p' | head -n1 || true)
     [ -n "$local" ] || local='unknown'
     repo=''
     # The OpenWrt package is published as a Git tag as well as a package
     # artifact. Use tags so the checker also works before a GitHub Release is
     # created for a revision.
     latest=$(curl_text 'https://api.github.com/repos/driftbottle61/sbx/tags?per_page=100' 2>/dev/null | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\(openwrt-v[0-9.]*-r[0-9][0-9]*\)".*/\1/p' | sed 's/^openwrt-v//' | sort -V | tail -n1 || true)
+    [ -n "$latest" ] || latest=$(latest_redirect_tag driftbottle61/sbx | sed 's/^openwrt-v//')
     [ -n "$latest" ] || latest='unknown'
     cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
     case "$local" in unknown) local_json='unknown' ;; *) local_json="v$local" ;; esac
-    printf '{"local":"%s","latest":"v%s","update_available":%s,"update_kind":"sbx"}\n' "$local_json" "$latest" "$update"
+    case "$latest" in unknown) latest_json='unknown' ;; *) latest_json="v$latest" ;; esac
+    printf '{"local":"%s","latest":"%s","update_available":%s,"update_kind":"sbx"}\n' "$local_json" "$latest_json" "$update"
     exit 0
     ;;
 	*) exit 2 ;;
 esac
 latest=''
 [ -n "$repo" ] && latest=$(curl_text "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+[ -n "$latest" ] || [ -z "$repo" ] || latest=$(latest_redirect_tag "$repo")
 [ -n "$latest" ] || latest='unknown'
 cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
+[ "$latest" = unknown ] && update=false
 case "$local" in unknown) local_json='unknown' ;; *) local_json="v$local" ;; esac
-printf '{"local":"%s","latest":"%s","update_available":%s}\n' "$local_json" "$latest" "$update"
+case "$latest" in unknown) latest_json='unknown' ;; *) latest_json="$latest" ;; esac
+printf '{"local":"%s","latest":"%s","update_available":%s}\n' "$local_json" "$latest_json" "$update"

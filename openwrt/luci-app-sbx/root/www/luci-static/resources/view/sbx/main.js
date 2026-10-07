@@ -171,17 +171,23 @@ return view.extend({
 			});
 		});
 		function refresh() {
-			return Promise.all([
-			fs.exec_direct('/usr/bin/sbx-luci-status'),
-			fs.exec_direct('/usr/bin/sbx-luci-health'),
-			fs.exec_direct('/usr/bin/sbx-luci-dns'),
-			fs.exec_direct('/usr/bin/sbx-luci-action', [ 'log' ])
-		]).then(function(values) {
-			try { updateStatus(root, JSON.parse(commandOutput(values[0]) || '{}')); } catch (e) {}
-			try { updateHealth(root, JSON.parse(commandOutput(values[1]) || '{}')); } catch (e) {}
-			try { updateDns(root, JSON.parse(commandOutput(values[2]) || '{}')); } catch (e) {}
-			var logText = commandOutput(values[3]);
-				if (logBox && logText) { logBox.textContent = logText; logBox.scrollTop = logBox.scrollHeight; }
+			fs.exec_direct('/usr/bin/sbx-luci-status').then(function(value) {
+				try { updateStatus(root, JSON.parse(commandOutput(value) || '{}')); } catch (e) {}
+			}).catch(function() {});
+			fs.exec_direct('/usr/bin/sbx-luci-health').then(function(value) {
+				try { updateHealth(root, JSON.parse(commandOutput(value) || '{}')); } catch (e) {}
+			}).catch(function() {});
+			fs.exec_direct('/usr/bin/sbx-luci-dns').then(function(value) {
+				try { updateDns(root, JSON.parse(commandOutput(value) || '{}')); } catch (e) {}
+			}).catch(function() {});
+			return fs.exec_direct('/usr/bin/sbx-luci-action', [ 'log' ]).then(function(value) {
+				var logText = commandOutput(value);
+				if (logBox) {
+					logBox.textContent = logText || _('暂无日志');
+					logBox.scrollTop = logBox.scrollHeight;
+				}
+			}).catch(function(error) {
+				if (logBox) logBox.textContent = _('日志读取失败：') + error;
 			});
 		}
 		refresh();
