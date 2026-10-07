@@ -67,16 +67,14 @@ sbx)
 		url="$SBX_OPENWRT_PACKAGE_URL"
 	else
 		release=$(curl_text "https://api.github.com/repos/driftbottle61/sbx/releases/tags/${release_tag}")
-		url=$(printf '%s' "$release" | sed -n 's#.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*luci-app-sbx-[^"]*\.apk\)".*#\1#p' | head -n1)
+	url=$(printf '%s' "$release" | sed -n "s#.*\"browser_download_url\"[[:space:]]*:[[:space:]]*\"\([^\"]*/luci-app-sbx-${latest}\.apk\)\".*#\1#p" | head -n1)
 	fi
 	[ -n "$url" ] || { echo "no SBX APK asset found in ${release_tag}" >&2; exit 1; }
 	file="$tmpdir/luci-app-sbx-${latest}.apk"
 	rm -f "$file"
 	curl_fetch "$url" "$file"
-	if apk info -e luci-app-sbx >/dev/null 2>&1; then
-		apk del luci-app-sbx
-	fi
-	apk add --allow-untrusted "$file"
+	# Upgrade in place; never remove the working package before the new one is verified.
+	apk add --allow-untrusted --upgrade "$file"
 	/etc/init.d/rpcd reload >/dev/null 2>&1 || /etc/init.d/rpcd restart >/dev/null 2>&1 || true
 	installed=$(apk info -a luci-app-sbx 2>/dev/null | sed -n 's/^luci-app-sbx-\([^ ]*\) description:.*/\1/p' | head -n1)
 	[ "$installed" = "$latest" ] || { echo "installed version mismatch: expected $latest, got ${installed:-unknown}" >&2; exit 1; }

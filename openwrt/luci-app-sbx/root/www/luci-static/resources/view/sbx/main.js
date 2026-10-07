@@ -129,10 +129,10 @@ return view.extend({
 		save.addEventListener('click', function() {
 			var tun = root.querySelector('[name="sbx-tun-url"]').value;
 			var tproxy = root.querySelector('[name="sbx-tproxy-url"]').value;
-			uci.set('sbx', 'main', 'tun_config_url', tun);
-			uci.set('sbx', 'main', 'tproxy_config_url', tproxy);
-			uci.save().then(function() { return uci.apply(); }).then(function() {
-				root.querySelector('[name="sbx-config-result"]').textContent = _('配置链接已保存');
+			fs.exec_direct('/usr/bin/sbx-luci-config-save', [ tun, tproxy ]).then(function(value) {
+				var error = commandError(value);
+				if (error) throw new Error(error);
+				root.querySelector('[name="sbx-config-result"]').textContent = _('配置链接已保存（无需应用）');
 			}).catch(function(error) {
 				root.querySelector('[name="sbx-config-result"]').textContent = _('保存失败：') + error;
 			});

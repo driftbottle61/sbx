@@ -40,7 +40,12 @@ case "$action" in
 		fi
 		;;
 	log)
-		logread | grep sing-box | tail -30
+		out=$(logread | grep -i -E 'sing-box|sbx' | tail -30 || true)
+		if [ -n "$out" ]; then printf '%s\n' "$out"; else
+			printf '%s\n' '当前 sing-box 未写入系统 logread（procd 正常运行但没有日志输出）。'
+			printf '%s\n' '最近 SBX/APK 操作日志：'
+			tail -30 /var/log/apk.log 2>/dev/null || true
+		fi
 		;;
 	route-status)
 		/usr/bin/sbx-luci-route status

@@ -9,6 +9,7 @@
       },
       "file": {
         "/usr/bin/sbx-luci-status": [ "exec" ],
+        "/usr/bin/sbx-luci-config-save": [ "exec" ],
         "/usr/bin/sbx-luci-transaction tun": [ "exec" ],
         "/usr/bin/sbx-luci-transaction tproxy": [ "exec" ],
         "/usr/bin/sbx-luci-transaction proxy-only": [ "exec" ],

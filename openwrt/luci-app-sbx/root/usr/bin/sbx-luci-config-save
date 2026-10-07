@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+tun="${1:-}"
+tproxy="${2:-}"
+case "$tun$tproxy" in *[[:space:]]*) echo 'URL cannot contain whitespace' >&2; exit 2 ;; esac
+case "$tun$tproxy" in *://*) ;; *) echo 'invalid configuration URL' >&2; exit 2 ;; esac
+uci set sbx.main.tun_config_url="$tun"
+uci set sbx.main.tproxy_config_url="$tproxy"
+uci commit sbx
+[ "$(uci -q get sbx.main.tun_config_url)" = "$tun" ] || exit 1
+[ "$(uci -q get sbx.main.tproxy_config_url)" = "$tproxy" ] || exit 1
+printf '{"ok":true,"tun_config_url":"%s","tproxy_config_url":"%s"}\n' "$tun" "$tproxy"
