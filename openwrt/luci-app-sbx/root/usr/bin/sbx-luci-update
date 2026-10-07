@@ -57,8 +57,15 @@ sbx)
 	fi
 	latest=$(/usr/bin/sbx-luci-version sbx | sed -n 's/.*"latest":"v\([0-9.]*\)".*/\1/p')
 	[ -n "$latest" ] || { echo "unable to determine latest OpenWrt release" >&2; exit 1; }
-	url="${SBX_OPENWRT_PACKAGE_URL:-https://github.com/driftbottle61/sbx/releases/download/openwrt-v${latest}/luci-app-sbx-x86_64.apk}"
-	file="$tmpdir/luci-app-sbx-${latest}-r1.apk"
+	release_tag="openwrt-v${latest}"
+	if [ -n "${SBX_OPENWRT_PACKAGE_URL:-}" ]; then
+		url="$SBX_OPENWRT_PACKAGE_URL"
+	else
+		release=$(curl_text "https://api.github.com/repos/driftbottle61/sbx/releases/tags/${release_tag}")
+		url=$(printf '%s' "$release" | sed -n 's#.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*luci-app-sbx-[^"]*\.apk\)".*#\1#p' | head -n1)
+	fi
+	[ -n "$url" ] || { echo "no SBX APK asset found in ${release_tag}" >&2; exit 1; }
+	file="$tmpdir/luci-app-sbx-${latest}.apk"
 	rm -f "$file"
 	curl_fetch "$url" "$file"
 	if apk info -e luci-app-sbx >/dev/null 2>&1; then

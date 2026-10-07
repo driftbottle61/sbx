@@ -46,6 +46,7 @@ for f in \
 	root/usr/bin/sbx-luci-health \
 	root/usr/bin/sbx-luci-migrate \
 	root/usr/bin/sbx-luci-transaction \
+	root/usr/bin/sbx-luci-firmware-backup \
 	root/usr/share/luci/menu.d/luci-app-sbx.json \
 	root/usr/share/rpcd/acl.d/luci-app-sbx.json \
 	root/www/luci-static/resources/view/sbx.js; do

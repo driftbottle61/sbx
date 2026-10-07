@@ -8,6 +8,11 @@
 
 当前打包修订：`0.3.0-r4`
 
+当前打包修订：`0.3.0-r5`
+
+- `0.3.0-r5` 修复 SBX APK 更新时固定文件名导致的下载失败。
+- `0.3.0-r5` 增加固件升级前后的 SBX 配置备份/恢复命令。
+
 - `0.3.0-r4` 修复 SBX 版本检查对 OpenWrt release tag 的识别。
 
 - 标准化 ImmortalWrt/OpenWrt LuCI 插件目录与 Makefile。

@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+
+root=/etc/sbx/firmware-backup
+config=/etc/config/sbx
+singbox=$(uci -q get sbx.main.config_file 2>/dev/null || echo /etc/sing-box/config.json)
+
+case "${1:-create}" in
+create)
+	stamp=$(date +%Y%m%d-%H%M%S)
+	dir="$root/$stamp"
+	mkdir -p "$dir"
+	[ -f "$config" ] && cp -p "$config" "$dir/sbx.config"
+	[ -f "$singbox" ] && cp -p "$singbox" "$dir/sing-box.json"
+	uci show sbx > "$dir/sbx.uci"
+	printf '%s\n' "$dir"
+	;;
+latest)
+	find "$root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n1
+	;;
+restore)
+	dir=${2:-$(find "$root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n1)}
+	[ -d "$dir" ] || { echo 'firmware backup not found' >&2; exit 1; }
+	[ -f "$dir/sbx.config" ] && cp -p "$dir/sbx.config" "$config"
+	[ -f "$dir/sing-box.json" ] && { mkdir -p "$(dirname "$singbox")"; cp -p "$dir/sing-box.json" "$singbox"; }
+	printf '%s\n' "restored $dir"
+	;;
+*)
+	echo "usage: $0 {create|latest|restore [DIRECTORY]}" >&2
+	exit 2
+	;;
+esac
