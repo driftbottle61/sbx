@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sbx
 PKG_VERSION:=0.3.0
-PKG_RELEASE:=5
+PKG_RELEASE:=6
 
 include $(INCLUDE_DIR)/package.mk
 

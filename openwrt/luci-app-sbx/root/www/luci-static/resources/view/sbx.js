@@ -13,7 +13,7 @@ return view.extend({
 			fs.exec_direct('/usr/bin/sbx-luci-health'),
 			fs.exec_direct('/usr/bin/sbx-luci-dns'),
 			fs.exec_direct('/usr/bin/sbx-luci-backup', [ 'list' ]),
-			fs.read('/etc/sing-box/config.json')
+			fs.read('/etc/sing-box/config.json').catch(function() { return ''; })
 		]);
 	},
 
