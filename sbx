@@ -29,7 +29,9 @@ if [ "${DASHBOARD_PROMPT_DRAWN:-0}" != "1" ]; then
     DASHBOARD_PROMPT_DRAWN=1
 fi
 if ! read -r -t 2 CHOICE; then
-    refresh_dashboard_metrics
+    DASHBOARD_DRAWN=0
+    DASHBOARD_PROMPT_DRAWN=0
+    dashboard
     continue
 fi
 
