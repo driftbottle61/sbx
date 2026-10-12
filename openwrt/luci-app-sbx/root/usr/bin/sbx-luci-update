@@ -2,18 +2,27 @@
 set -eu
 kind="${1:-}"
 tmpdir=/tmp/sbx-update
+rm -rf "$tmpdir"
 mkdir -p "$tmpdir"
+cleanup() { rm -rf "$tmpdir"; }
+trap cleanup EXIT INT TERM
 
 curl_fetch() {
 	url="$1"
 	out="$2"
 	if curl -fsS --connect-timeout 3 -x http://127.0.0.1:8080 https://api.github.com/rate_limit >/dev/null 2>&1; then
-		curl -fL -x http://127.0.0.1:8080 --connect-timeout 10 --retry 2 "$url" -o "$out"
+		curl -fL -x http://127.0.0.1:8080 --connect-timeout 10 --max-time 120 --retry 2 "$url" -o "$out" && return 0
 	elif curl -fsS --connect-timeout 3 --socks5-hostname 127.0.0.1:1080 https://api.github.com/rate_limit >/dev/null 2>&1; then
-		curl -fL --socks5-hostname 127.0.0.1:1080 --connect-timeout 10 --retry 2 "$url" -o "$out"
+		curl -fL --socks5-hostname 127.0.0.1:1080 --connect-timeout 10 --max-time 120 --retry 2 "$url" -o "$out" && return 0
 	else
-		curl -fL --connect-timeout 10 --retry 2 "$url" -o "$out"
+		curl -fL --connect-timeout 10 --max-time 120 --retry 2 "$url" -o "$out" && return 0
 	fi
+	case "$url" in
+		https://github.com/*/releases/download/*)
+			curl -fL --connect-timeout 10 --max-time 180 --retry 2 "https://gh-proxy.com/$url" -o "$out"
+			;;
+		*) return 1 ;;
+	esac
 }
 
 curl_text() {
@@ -38,21 +47,44 @@ singbox)
 		*) echo "unsupported architecture: $arch" >&2; exit 1 ;;
 	esac
 	latest=$(curl_text https://api.github.com/repos/SagerNet/sing-box/releases/latest)
+	latest_version=$(printf '%s' "$latest" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([^"]*\)".*/\1/p' | head -n1)
+	[ -n "$latest_version" ] || { echo "unable to determine latest sing-box version" >&2; exit 1; }
 	url=$(printf '%s' "$latest" | sed -n "s#.*\\\"browser_download_url\\\"[[:space:]]*:[[:space:]]*\\\"\\([^\\\"]*sing-box-[0-9.]*-linux-${asset_arch}-musl.tar.gz\\\"\).*#\\1#p" | head -n1)
+	url=$(printf '%s' "$latest" | jsonfilter -e '@.assets[*].browser_download_url' | grep -E "sing-box-[0-9.]+-linux-${asset_arch}-musl\\.tar\\.gz$" | head -n1)
 	[ -n "$url" ] || { echo "no matching sing-box musl asset" >&2; exit 1; }
 	archive="$tmpdir/sing-box.tar.gz"
 	curl_fetch "$url" "$archive"
 	newbin="$tmpdir/sing-box"
 	tar -xzf "$archive" -O "$(tar -tzf "$archive" | grep '/sing-box$' | head -n1)" > "$newbin"
+	rm -f "$archive"
 	chmod 0755 "$newbin"
 	config="$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)"
 	if [ -f "$config" ]; then
 		"$newbin" check -c "$config" >/dev/null
 	fi
+	cp /usr/bin/sing-box "$tmpdir/sing-box.previous"
 	/etc/init.d/sbx stop >/dev/null 2>&1 || true
-	cp "$newbin" /usr/bin/sing-box
-	if [ -f "$config" ]; then
+	if ! cp "$newbin" /usr/bin/sing-box; then
+		cp "$tmpdir/sing-box.previous" /usr/bin/sing-box
 		/etc/init.d/sbx start >/dev/null 2>&1 || true
+		echo "sing-box replacement failed; restored previous binary" >&2
+		exit 1
+	fi
+	chmod 0755 /usr/bin/sing-box
+	if [ -f "$config" ]; then
+		if ! /etc/init.d/sbx start >/dev/null 2>&1; then
+			cp "$tmpdir/sing-box.previous" /usr/bin/sing-box
+			/etc/init.d/sbx start >/dev/null 2>&1 || true
+			echo "sing-box restart failed; restored previous binary" >&2
+			exit 1
+		fi
+	fi
+	installed_version=$(/usr/bin/sing-box version 2>/dev/null | sed -n 's/.*sing-box version \([^ ]*\).*/\1/p' | head -n1)
+	if [ "$installed_version" != "$latest_version" ]; then
+		cp "$tmpdir/sing-box.previous" /usr/bin/sing-box
+		/etc/init.d/sbx restart >/dev/null 2>&1 || true
+		echo "sing-box version mismatch: expected $latest_version, got ${installed_version:-unknown}; restored previous binary" >&2
+		exit 1
 	fi
 	;;
 sbx)

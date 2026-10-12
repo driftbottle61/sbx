@@ -285,7 +285,7 @@ function configPane() {
 function panelPane(panel) {
 	return E('div', { 'class': 'sbx-card' }, [
 		E('p', {}, _('面板版本：') + (panel.version || _('未安装'))),
-		panel.installed ? E('p', {}, [E('a', { href: '/zashboard/', target: '_blank' }, _('打开 Zashboard 面板'))]) : E('p', {}, _('暂无已安装面板'))
+		panel.installed ? E('p', {}, [E('a', { href: panel.url || '/zashboard/', target: '_blank', rel: 'noreferrer' }, _('打开 Zashboard 面板'))]) : E('p', {}, _('暂无已安装面板'))
 	]);
 }
 

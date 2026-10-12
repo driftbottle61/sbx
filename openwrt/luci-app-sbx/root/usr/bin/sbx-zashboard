@@ -8,16 +8,29 @@ api='https://api.github.com/repos/Zephyruso/zashboard/releases/latest'
 cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT INT TERM
 json_escape() { sed 's/[\\"]/\\&/g'; }
+latest_version() {
+  curl -fsSL --connect-timeout 3 --max-time 6 "$api" 2>/dev/null |
+    jsonfilter -e '@.tag_name' 2>/dev/null || true
+}
+config_ui_url() {
+  controller=$(jsonfilter -i /etc/sing-box/config.json -e '@.experimental.clash_api.external_controller' 2>/dev/null || true)
+  port=${controller##*:}
+  case "$port" in ''|*[!0-9]*) port=9090 ;; esac
+  lan_ip=$(ip -4 -o addr show dev br-lan 2>/dev/null | awk 'NR == 1 { split($4, address, "/"); print address[1] }')
+  [ -n "$lan_ip" ] || lan_ip=127.0.0.1
+  printf 'http://%s:%s/ui/' "$lan_ip" "$port"
+}
 status() {
   if [ -f "$meta" ] && [ -f "$base/index.html" ]; then
     v=$(cat "$meta")
     printf '{"installed":true,"version":"%s","url":"/zashboard/"}\n' "$(printf '%s' "$v" | json_escape)"
   elif [ -f "$config_ui/index.html" ]; then
-    # sing-box can download/manage the UI itself through clash_api.external_ui.
-    # This is a valid installation even though it is not under /www/zashboard.
-    v="sing-box-managed"
-    [ -f "$config_ui/.version" ] && v=$(cat "$config_ui/.version")
-    printf '{"installed":true,"version":"%s","url":"/ui/","source":"sing-box"}\n' "$(printf '%s' "$v" | json_escape)"
+    v=$(cat "$config_ui/.version" 2>/dev/null || true)
+    [ -n "$v" ] || v=$(latest_version)
+    [ -n "$v" ] || v="unknown"
+    panel_url=$(config_ui_url)
+    printf '{"installed":true,"version":"%s","url":"%s","source":"sing-box"}\n' \
+      "$(printf '%s' "$v" | json_escape)" "$(printf '%s' "$panel_url" | json_escape)"
   else
     printf '{"installed":false,"version":null,"url":"/zashboard/"}\n'
   fi
