@@ -67,6 +67,11 @@
         ,"/usr/bin/sbx-zashboard update": [ "exec" ]
         ,"/usr/bin/sbx-luci-action update-singbox": [ "exec" ]
         ,"/usr/bin/sbx-luci-action update-sbx": [ "exec" ]
+		,"/usr/bin/sbx-luci-action set-log-level trace": [ "exec" ]
+		,"/usr/bin/sbx-luci-action set-log-level debug": [ "exec" ]
+		,"/usr/bin/sbx-luci-action set-log-level info": [ "exec" ]
+		,"/usr/bin/sbx-luci-action set-log-level warn": [ "exec" ]
+		,"/usr/bin/sbx-luci-action set-log-level error": [ "exec" ]
         ,"/www/sbx/config-tun.json": [ "write" ]
         ,"/www/sbx/config-tproxy.json": [ "write" ]
       }

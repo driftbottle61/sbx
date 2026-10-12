@@ -47,6 +47,11 @@ case "$action" in
 			tail -30 /var/log/apk.log 2>/dev/null || true
 		fi
 		;;
+	set-log-level)
+		level="${2:-}"
+		case "$level" in trace|debug|info|warn|error|fatal|panic) ;; *) echo "invalid log level" >&2; exit 2 ;; esac
+		/usr/bin/sbx-luci-log-level "$level"
+		;;
 	route-status)
 		/usr/bin/sbx-luci-route status
 		;;

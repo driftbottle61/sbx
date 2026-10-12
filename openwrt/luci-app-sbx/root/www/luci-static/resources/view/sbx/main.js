@@ -48,7 +48,7 @@ return view.extend({
 			E('div', { 'class': 'sbx-pane', 'data-pane': 'config' }, configPane()),
 			E('div', { 'class': 'sbx-pane', 'data-pane': 'panel' }, panelPane(panel)),
 			E('div', { 'class': 'sbx-pane', 'data-pane': 'current' }, currentPane(data[6])),
-			E('div', { 'class': 'sbx-pane', 'data-pane': 'logs' }, logsPane())
+			E('div', { 'class': 'sbx-pane', 'data-pane': 'logs' }, logsPane(uci.get('sbx', 'main', 'log_level') || 'info'))
 		]);
 
 		var style = E('style', {}, [
@@ -213,6 +213,25 @@ return view.extend({
 			});
 		}
 		if (logRefreshButton) logRefreshButton.addEventListener('click', function() { refreshLog(true); });
+		var logLevelButton = root.querySelector('[name="sbx-log-level-apply"]');
+		if (logLevelButton) logLevelButton.addEventListener('click', function() {
+			var level = root.querySelector('[name="sbx-log-level"]').value;
+			var result = root.querySelector('[name="sbx-log-level-result"]');
+			logLevelButton.disabled = true;
+			result.className = 'sbx-result';
+			result.textContent = _('正在应用日志级别并重启 sing-box…');
+			fs.exec_direct('/usr/bin/sbx-luci-action', [ 'set-log-level', level ]).then(function(value) {
+				var error = commandError(value);
+				result.className = error ? 'sbx-result error' : 'sbx-result success';
+				result.textContent = error ? _('设置失败：') + error : _('日志级别已设为 ') + level;
+				logLevelButton.disabled = false;
+				if (!error) refreshLog(true);
+			}).catch(function(error) {
+				result.className = 'sbx-result error';
+				result.textContent = _('设置失败：') + error;
+				logLevelButton.disabled = false;
+			});
+		});
 		refreshRuntime();
 		poll.add(refreshRuntime, 5);
 		poll.add(function() { return refreshLog(false); }, 3);
@@ -316,8 +335,19 @@ function currentPane(content) {
 	return E('div', { 'class': 'sbx-card' }, [E('textarea', { 'class': 'sbx-mono', readonly: true }, content || '')]);
 }
 
-function logsPane() {
+function logsPane(level) {
 	return E('div', { 'class': 'sbx-card' }, [
+		E('div', { 'class': 'sbx-mode-row' }, [
+			E('label', {}, _('日志级别')),
+			E('select', { name: 'sbx-log-level' }, [
+				E('option', { value: 'info', selected: level === 'info' }, 'info'),
+				E('option', { value: 'debug', selected: level === 'debug' }, 'debug'),
+				E('option', { value: 'warn', selected: level === 'warn' }, 'warn'),
+				E('option', { value: 'error', selected: level === 'error' }, 'error')
+			]),
+			E('button', { name: 'sbx-log-level-apply', 'class': 'cbi-button cbi-button-action' }, _('应用并重启')),
+			E('span', { name: 'sbx-log-level-result', 'class': 'sbx-result' })
+		]),
 		E('div', { 'class': 'sbx-mode-row' }, [
 			E('button', { name: 'sbx-log-refresh', 'class': 'cbi-button cbi-button-action' }, _('立即刷新')),
 			E('label', {}, [E('input', { name: 'sbx-log-autoscroll', type: 'checkbox', checked: true }), ' ', _('自动滚动到底部')]),

@@ -40,6 +40,28 @@ mkdir -p "$(dirname "$target")"
 curl -fsSL --retry 2 --connect-timeout 15 --max-time 120 "$url" -o "$tmp"
 [ -s "$tmp" ] || { echo "downloaded config is empty" >&2; exit 1; }
 
+# The remote profile may use warn/error and therefore produce no live traffic
+# logs. Keep the locally selected SBX log level across every profile refresh.
+log_level=$(uci -q get sbx.main.log_level || echo info)
+case "$log_level" in trace|debug|info|warn|error|fatal|panic) ;;
+	*) log_level=info ;;
+esac
+tmp_with_log="${tmp}.log"
+ucode - "$tmp" "$tmp_with_log" "$log_level" <<'UCODE'
+import { readfile, writefile } from 'fs';
+
+let config = json(readfile(ARGV[0]));
+if (type(config) != 'object')
+	die('invalid sing-box configuration\n');
+if (type(config.log) != 'object')
+	config.log = {};
+config.log.disabled = false;
+config.log.level = ARGV[2];
+config.log.timestamp = true;
+writefile(ARGV[1], sprintf('%J\n', config));
+UCODE
+mv "$tmp_with_log" "$tmp"
+
 if ! /usr/bin/sing-box check -c "$tmp" >/tmp/sbx-remote-check.out 2>&1; then
 	cat /tmp/sbx-remote-check.out >&2
 	exit 1

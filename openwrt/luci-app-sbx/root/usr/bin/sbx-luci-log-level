@@ -1,0 +1,44 @@
+#!/bin/sh
+set -eu
+
+level="${1:-}"
+case "$level" in trace|debug|info|warn|error|fatal|panic) ;; *) echo "invalid log level" >&2; exit 2 ;; esac
+
+config=$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)
+[ -s "$config" ] || { echo "sing-box configuration not found" >&2; exit 1; }
+tmp="${config}.log-level.$$"
+trap 'rm -f "$tmp"' EXIT INT TERM
+
+ucode - "$config" "$tmp" "$level" <<'UCODE'
+import { readfile, writefile } from 'fs';
+
+let input = ARGV[0];
+let output = ARGV[1];
+let level = ARGV[2];
+let config = json(readfile(input));
+
+if (type(config) != 'object')
+	die('invalid sing-box configuration\n');
+
+if (type(config.log) != 'object')
+	config.log = {};
+
+config.log.disabled = false;
+config.log.level = level;
+config.log.timestamp = true;
+
+writefile(output, sprintf('%J\n', config));
+UCODE
+
+chmod 600 "$tmp"
+if ! /usr/bin/sing-box check -c "$tmp" >/tmp/sbx-log-level-check.out 2>&1; then
+	cat /tmp/sbx-log-level-check.out >&2
+	exit 1
+fi
+
+uci set sbx.main.log_level="$level"
+uci commit sbx
+# The restart downloads the active profile again; sbx-luci-sync reapplies the
+# saved level to that fresh copy before sing-box validates and starts it.
+/etc/init.d/sbx restart >/dev/null 2>&1
+printf '{"ok":true,"log_level":"%s"}\n' "$level"

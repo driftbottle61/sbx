@@ -34,6 +34,11 @@ changed=0
 [ "$(uci_get mode)" = "$mode" ] || { uci set sbx.main.mode="$mode"; changed=1; }
 [ "$(uci_get config_profile)" = "$profile" ] || { uci set sbx.main.config_profile="$profile"; changed=1; }
 
+log_level=$(uci_get log_level)
+case "$log_level" in trace|debug|info|warn|error|fatal|panic) ;;
+	*) uci set sbx.main.log_level='info'; changed=1 ;;
+esac
+
 active=$(uci_get active_config_url)
 if [ -z "$active" ]; then
 	case "$profile" in
