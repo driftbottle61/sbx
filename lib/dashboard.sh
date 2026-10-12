@@ -111,8 +111,9 @@ if [ "$SBX_LATEST_VERSION" = "未知" ] && command -v curl >/dev/null 2>&1 && co
         setup_download_proxy >/dev/null 2>&1 || true
     fi
     SBX_LATEST_VERSION=$(curl -fsSL --connect-timeout 2 --max-time 4 \
-        https://api.github.com/repos/driftbottle61/sbx/releases/latest 2>/dev/null \
-        | jq -r '.tag_name // empty' 2>/dev/null)
+        'https://api.github.com/repos/driftbottle61/sbx/releases?per_page=100' 2>/dev/null \
+        | jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' 2>/dev/null \
+        | sort -V | tail -n1)
     [ -n "$SBX_LATEST_VERSION" ] || SBX_LATEST_VERSION="未知"
     [ "$SBX_LATEST_VERSION" = "未知" ] || SBX_LATEST_VERSION="v${SBX_LATEST_VERSION#v}"
     if [ "$SBX_LATEST_VERSION" != "未知" ]; then
