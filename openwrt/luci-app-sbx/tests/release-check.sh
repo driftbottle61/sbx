@@ -17,7 +17,7 @@ if [ "$root" = "--installed" ]; then
 		/usr/bin/sbx-luci-transaction \
 		/usr/share/luci/menu.d/luci-app-sbx.json \
 		/usr/share/rpcd/acl.d/luci-app-sbx.json \
-		/www/luci-static/resources/view/sbx.js; do
+		/www/luci-static/resources/view/sbx/main.js; do
 		[ -e "$f" ] || fail "missing installed file: $f"
 	done
 	[ -x /etc/init.d/sbx ] || fail "init script is not executable"
@@ -49,7 +49,7 @@ for f in \
 	root/usr/bin/sbx-luci-firmware-backup \
 	root/usr/share/luci/menu.d/luci-app-sbx.json \
 	root/usr/share/rpcd/acl.d/luci-app-sbx.json \
-	root/www/luci-static/resources/view/sbx.js; do
+	root/www/luci-static/resources/view/sbx/main.js; do
 	[ -e "$pkg/$f" ] || fail "missing source file: $f"
 done
 
@@ -59,7 +59,7 @@ for f in "$pkg"/root/etc/init.d/sbx "$pkg"/root/usr/bin/sbx-*; do
 done
 
 if command -v node >/dev/null 2>&1; then
-	node --check "$pkg/root/www/luci-static/resources/view/sbx.js" >/dev/null || fail "JavaScript syntax"
+	 node --check "$pkg/root/www/luci-static/resources/view/sbx/main.js" >/dev/null || fail "JavaScript syntax"
 fi
 
 if command -v python3 >/dev/null 2>&1; then

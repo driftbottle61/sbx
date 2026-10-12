@@ -3,6 +3,7 @@
 'require uci';
 'require fs';
 'require ui';
+'require poll';
 
 return view.extend({
 	load: function() {
@@ -63,6 +64,7 @@ return view.extend({
 				root.querySelectorAll('.sbx-tab,.sbx-pane').forEach(function(node) { node.classList.remove('active'); });
 				tab.classList.add('active');
 				root.querySelector('[data-pane="' + tab.dataset.tab + '"]').classList.add('active');
+				if (tab.dataset.tab === 'logs') refreshLog(true);
 			});
 		});
 
@@ -106,7 +108,7 @@ return view.extend({
 				} else {
 					resultBox.className = 'sbx-result success';
 					resultBox.textContent = action == 'start' ? _('sing-box 已运行') : _('sing-box 已停止');
-					refresh();
+					refreshRuntime();
 				}
 			});
 		}
@@ -120,7 +122,7 @@ return view.extend({
 					var result = button.parentNode.querySelector('.sbx-result');
 					if (result) result.textContent = error ? _('恢复失败：') + error : _('恢复成功');
 					button.disabled = false;
-					if (!error) refresh();
+					if (!error) refreshRuntime();
 				}).catch(function(error) { button.disabled = false; });
 			});
 		});
@@ -170,7 +172,15 @@ return view.extend({
 				});
 			});
 		});
-		function refresh() {
+		var logRefreshing = false;
+		var logAutoScroll = true;
+		var logRefreshButton = root.querySelector('[name="sbx-log-refresh"]');
+		var logAutoScrollInput = root.querySelector('[name="sbx-log-autoscroll"]');
+		if (logAutoScrollInput) logAutoScrollInput.addEventListener('change', function() {
+			logAutoScroll = logAutoScrollInput.checked;
+		});
+
+		function refreshRuntime() {
 			fs.exec_direct('/usr/bin/sbx-luci-status').then(function(value) {
 				try { updateStatus(root, JSON.parse(commandOutput(value) || '{}')); } catch (e) {}
 			}).catch(function() {});
@@ -180,19 +190,32 @@ return view.extend({
 			fs.exec_direct('/usr/bin/sbx-luci-dns').then(function(value) {
 				try { updateDns(root, JSON.parse(commandOutput(value) || '{}')); } catch (e) {}
 			}).catch(function() {});
+		}
+		function refreshLog(force) {
+			var pane = root.querySelector('[data-pane="logs"]');
+			if (!force && (!pane || !pane.classList.contains('active'))) return Promise.resolve();
+			if (logRefreshing) return Promise.resolve();
+			logRefreshing = true;
+			if (logRefreshButton) logRefreshButton.disabled = true;
 			return fs.exec_direct('/usr/bin/sbx-luci-action', [ 'log' ]).then(function(value) {
 				var logText = commandOutput(value);
 				if (logBox) {
 					logBox.textContent = logText || _('暂无日志');
-					logBox.scrollTop = logBox.scrollHeight;
+					if (logAutoScroll) logBox.scrollTop = logBox.scrollHeight;
 				}
+				var refreshed = root.querySelector('[data-log-refreshed]');
+				if (refreshed) refreshed.textContent = _('最后刷新：') + new Date().toLocaleTimeString();
 			}).catch(function(error) {
 				if (logBox) logBox.textContent = _('日志读取失败：') + error;
+			}).then(function() {
+				logRefreshing = false;
+				if (logRefreshButton) logRefreshButton.disabled = false;
 			});
 		}
-		refresh();
-		var timer = setInterval(refresh, 3000);
-		root.addEventListener('remove', function() { clearInterval(timer); });
+		if (logRefreshButton) logRefreshButton.addEventListener('click', function() { refreshLog(true); });
+		refreshRuntime();
+		poll.add(refreshRuntime, 5);
+		poll.add(function() { return refreshLog(false); }, 3);
 		return root;
 	}
 });
@@ -293,7 +316,16 @@ function currentPane(content) {
 	return E('div', { 'class': 'sbx-card' }, [E('textarea', { 'class': 'sbx-mono', readonly: true }, content || '')]);
 }
 
-function logsPane() { return E('div', { 'class': 'sbx-card' }, [E('pre', { 'class': 'sbx-log' }, _('正在读取日志…'))]); }
+function logsPane() {
+	return E('div', { 'class': 'sbx-card' }, [
+		E('div', { 'class': 'sbx-mode-row' }, [
+			E('button', { name: 'sbx-log-refresh', 'class': 'cbi-button cbi-button-action' }, _('立即刷新')),
+			E('label', {}, [E('input', { name: 'sbx-log-autoscroll', type: 'checkbox', checked: true }), ' ', _('自动滚动到底部')]),
+			E('span', { 'data-log-refreshed': '', 'class': 'sbx-version-meta' }, _('尚未刷新'))
+		]),
+		E('pre', { 'class': 'sbx-log' }, _('打开日志选项卡后自动刷新…'))
+	]);
+}
 function commandError(value) {
 	var output = commandOutput(value);
 	if (Array.isArray(value) && value[1]) return value[1];
