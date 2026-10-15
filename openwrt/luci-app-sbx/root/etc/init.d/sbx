@@ -5,7 +5,7 @@ USE_PROCD=1
 
 service_prepare() {
 	[ "$(uci -q get sbx.main.enabled || echo 0)" = "1" ] || return 1
-	/usr/bin/sbx-luci-sync
+	[ "${SBX_SKIP_SYNC:-0}" = "1" ] || /usr/bin/sbx-luci-sync
 }
 
 start_service() {
