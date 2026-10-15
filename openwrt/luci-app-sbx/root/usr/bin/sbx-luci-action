@@ -13,6 +13,11 @@ case "$action" in
 		case "$profile" in tun|tproxy|proxy-only) ;; *) echo "invalid mode" >&2; exit 2 ;; esac
 		/usr/bin/sbx-luci-action update-restart "$profile"
 		;;
+	update-config)
+		profile=$(uci -q get sbx.main.config_profile || uci -q get sbx.main.mode || echo proxy-only)
+		case "$profile" in tun|tproxy) ;; *) echo "current mode does not use a remote configuration" >&2; exit 1 ;; esac
+		/usr/bin/sbx-luci-action update-restart "$profile"
+		;;
 	update-restart)
 		/usr/bin/sbx-luci-transaction "${2:-$(uci -q get sbx.main.config_profile || echo proxy-only)}"
 		;;

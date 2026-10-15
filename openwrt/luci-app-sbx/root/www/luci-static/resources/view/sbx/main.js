@@ -95,6 +95,23 @@ return view.extend({
 				apply.disabled = false;
 			});
 		});
+		var updateConfig = root.querySelector('[name="sbx-update-config"]');
+		updateConfig.addEventListener('click', function() {
+			updateConfig.disabled = true;
+			resultBox.className = 'sbx-result';
+			resultBox.textContent = _('正在根据当前模式更新配置并重启 sing-box…');
+			fs.exec_direct('/usr/bin/sbx-luci-action', [ 'update-config' ]).then(function(result) {
+				var error = commandError(result);
+				resultBox.className = error ? 'sbx-result error' : 'sbx-result success';
+				resultBox.textContent = error ? _('更新失败：') + error : _('配置已更新并重启 sing-box');
+				updateConfig.disabled = false;
+				if (!error) refresh();
+			}).catch(function(error) {
+				resultBox.className = 'sbx-result error';
+				resultBox.textContent = _('更新失败：') + error;
+				updateConfig.disabled = false;
+			});
+		});
 
 		function serviceAction(action) {
 			var resultBox = root.querySelector('[name="sbx-service-result"]');
@@ -316,10 +333,11 @@ function versionRow(name, local, latest, kind) {
 
 function configPane() {
 	return E('div', { 'class': 'sbx-card' }, [
+		E('p', { 'class': 'sbx-version-meta' }, _('更新当前配置会根据当前运行模式下载对应的 TUN 或 TProxy 配置；更新前自动备份，失败自动回滚。')),
 		E('div', { 'class': 'sbx-grid' }, [
 			E('label', {}, _('TUN 配置链接')), E('input', { name: 'sbx-tun-url', value: uci.get('sbx', 'main', 'tun_config_url') || '', type: 'url' }),
 			E('label', {}, _('TProxy 配置链接')), E('input', { name: 'sbx-tproxy-url', value: uci.get('sbx', 'main', 'tproxy_config_url') || '', type: 'url' }),
-			E('label', {}, ''), E('div', {}, [E('button', { name: 'sbx-save-config', 'class': 'cbi-button cbi-button-save' }, _('保存配置链接')), E('div', { name: 'sbx-config-result', 'class': 'sbx-result' })])
+			E('label', {}, ''), E('div', {}, [E('button', { name: 'sbx-save-config', 'class': 'cbi-button cbi-button-save' }, _('保存配置链接')), E('button', { name: 'sbx-update-config', 'class': 'cbi-button cbi-button-action' }, _('更新当前配置')), E('div', { name: 'sbx-config-result', 'class': 'sbx-result' })])
 		])
 	]);
 }
