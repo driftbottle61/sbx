@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-profile="${1:-$(uci -q get sbx.main.config_profile || echo proxy-only)}"
+profile="${1:-$(uci -q get sbx.main.mode 2>/dev/null || uci -q get sbx.main.config_profile 2>/dev/null || echo proxy-only)}"
 config_file=$(uci -q get sbx.main.config_file || echo /etc/sing-box/config.json)
 backup_dir=/etc/sing-box/sbx-backups
 mkdir -p "$backup_dir"

@@ -14,7 +14,11 @@ case "$action" in
 		/usr/bin/sbx-luci-action update-restart "$profile"
 		;;
 	update-config)
-		profile=$(uci -q get sbx.main.config_profile || uci -q get sbx.main.mode || echo proxy-only)
+		profile=$(uci -q get sbx.main.mode 2>/dev/null || true)
+		case "$profile" in
+			tun|tproxy|proxy-only) ;;
+			*) profile=$(uci -q get sbx.main.config_profile 2>/dev/null || echo proxy-only) ;;
+		esac
 		case "$profile" in tun|tproxy) ;; *) echo "current mode does not use a remote configuration" >&2; exit 1 ;; esac
 		/usr/bin/sbx-luci-action update-restart "$profile"
 		;;
@@ -34,7 +38,11 @@ case "$action" in
 		/usr/bin/sbx-luci-status
 		;;
 	check)
-		profile=$(uci -q get sbx.main.config_profile || uci -q get sbx.main.mode || echo proxy-only)
+		profile=$(uci -q get sbx.main.mode 2>/dev/null || true)
+		case "$profile" in
+			tun|tproxy|proxy-only) ;;
+			*) profile=$(uci -q get sbx.main.config_profile 2>/dev/null || echo proxy-only) ;;
+		esac
 		if [ "$profile" = "tun" ] || [ "$profile" = "tproxy" ]; then
 			/usr/bin/sbx-luci-sync || exit 1
 		fi
