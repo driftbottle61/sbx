@@ -28,7 +28,7 @@ if [ "${DASHBOARD_PROMPT_DRAWN:-0}" != "1" ]; then
     printf '请选择：'
     DASHBOARD_PROMPT_DRAWN=1
 fi
-if ! read -r -t 2 CHOICE; then
+if ! read -r -t 5 CHOICE; then
     DASHBOARD_DRAWN=0
     DASHBOARD_PROMPT_DRAWN=0
     dashboard
