@@ -92,6 +92,33 @@ fi
 
 # Fetch the latest stable upstream release for comparison.  A dashboard
 # refresh must remain usable when GitHub is unavailable, so this is best effort.
+# Prefer a direct connection: the shared download proxy can hit GitHub's
+# unauthenticated API rate limit. Fall back to the proxy only when direct
+# access fails.
+fetch_github_tag() {
+    local url="$1" filter="$2" result
+    result=$(curl -fsSL --noproxy '*' --connect-timeout 3 --max-time 8 "$url" 2>/dev/null \
+        | jq -r "$filter" 2>/dev/null | sort -V | tail -n1)
+    if [ -z "$result" ] && command -v setup_download_proxy >/dev/null 2>&1; then
+        setup_download_proxy >/dev/null 2>&1 || true
+        result=$(curl -fsSL --connect-timeout 3 --max-time 10 "$url" 2>/dev/null \
+            | jq -r "$filter" 2>/dev/null | sort -V | tail -n1)
+    fi
+    printf '%s' "$result"
+}
+
+fetch_github_redirect_tag() {
+    local url="$1" result
+    result=$(curl -fsSI --noproxy '*' --connect-timeout 3 --max-time 6 "$url" 2>/dev/null \
+        | sed -n 's#^[Ll]ocation: .*/tag/##p' | tr -d '\r' | head -n1)
+    if [ -z "$result" ] && command -v setup_download_proxy >/dev/null 2>&1; then
+        setup_download_proxy >/dev/null 2>&1 || true
+        result=$(curl -fsSI --connect-timeout 3 --max-time 8 "$url" 2>/dev/null \
+            | sed -n 's#^[Ll]ocation: .*/tag/##p' | tr -d '\r' | head -n1)
+    fi
+    printf '%s' "$result"
+}
+
 LATEST_VERSION="${SINGBOX_LATEST_VERSION_CACHE:-未知}"
 now_epoch=$(date +%s)
 cache_epoch=${SINGBOX_LATEST_VERSION_CACHE_EPOCH:-0}
@@ -107,13 +134,11 @@ if [ "$SBX_LATEST_VERSION" = "未知" ] || [ $((now_epoch - sbx_latest_cache_epo
   SBX_LATEST_VERSION="未知"
 fi
 if [ "$SBX_LATEST_VERSION" = "未知" ] && command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-    if command -v setup_download_proxy >/dev/null 2>&1; then
-        setup_download_proxy >/dev/null 2>&1 || true
-    fi
-    SBX_LATEST_VERSION=$(curl -fsSL --connect-timeout 2 --max-time 4 \
-        'https://api.github.com/repos/driftbottle61/sbx/releases?per_page=100' 2>/dev/null \
-        | jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' 2>/dev/null \
-        | sort -V | tail -n1)
+    # Use the lightweight tags endpoint. The releases list embeds assets and
+    # bodies, and has grown large enough to exceed the short dashboard timeout.
+    SBX_LATEST_VERSION=$(fetch_github_tag \
+        'https://api.github.com/repos/driftbottle61/sbx/tags?per_page=100' \
+        '.[].name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))')
     [ -n "$SBX_LATEST_VERSION" ] || SBX_LATEST_VERSION="未知"
     [ "$SBX_LATEST_VERSION" = "未知" ] || SBX_LATEST_VERSION="v${SBX_LATEST_VERSION#v}"
     if [ "$SBX_LATEST_VERSION" != "未知" ]; then
@@ -128,22 +153,9 @@ if [ "$SBX_CURRENT_VERSION" != "未知" ] && [ "$SBX_LATEST_VERSION" != "未知"
     SBX_UPDATE_AVAILABLE=1
 fi
 if [ "$LATEST_VERSION" = "未知" ] && command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-    # Initialize the configured download proxy silently for the GitHub query.
-    if command -v setup_download_proxy >/dev/null 2>&1; then
-        setup_download_proxy >/dev/null 2>&1 || true
-    fi
-    LATEST_VERSION=$(curl -fsSL --connect-timeout 2 --max-time 4 \
-        https://api.github.com/repos/SagerNet/sing-box/releases/latest 2>/dev/null \
-        | jq -r '.tag_name // empty' 2>/dev/null)
-    # sing-box may still be bringing up the local proxy during startup. Retry
-    # proxy discovery once when the first GitHub request fails.
-    if [ -z "$LATEST_VERSION" ] && command -v setup_download_proxy >/dev/null 2>&1; then
-        unset SBX_DOWNLOAD_PROXY_READY
-        setup_download_proxy >/dev/null 2>&1 || true
-        LATEST_VERSION=$(curl -fsSL --connect-timeout 3 --max-time 6 \
-            https://api.github.com/repos/SagerNet/sing-box/releases/latest 2>/dev/null \
-            | jq -r '.tag_name // empty' 2>/dev/null)
-    fi
+    # The sing-box release object is large; use the tiny redirect header.
+    LATEST_VERSION=$(fetch_github_redirect_tag \
+        'https://github.com/SagerNet/sing-box/releases/latest')
     [ -n "$LATEST_VERSION" ] || LATEST_VERSION="未知"
     [ "$LATEST_VERSION" = "未知" ] || LATEST_VERSION="v${LATEST_VERSION#v}"
     if [ "$LATEST_VERSION" != "未知" ]; then
