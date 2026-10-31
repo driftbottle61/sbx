@@ -253,71 +253,28 @@ clear
 CPU_DISPLAY=$(printf '%10.1f' "$CPU_USE")
 MEM_DISPLAY=$(printf '%10.1f' "$MEM_USE")
 
+CPU_MODEL_SHORT=$(printf '%s' "$CPU_MODEL" | grep -oE 'i[0-9]-[0-9]+[A-Za-z]*' | head -1)
+[ -z "$CPU_MODEL_SHORT" ] && CPU_MODEL_SHORT=$(printf '%s' "$CPU_MODEL" | cut -c1-28)
+OS_SHORT=$(printf '%s' "$OS" | cut -c1-20)
+UPTIME_SHORT=$(printf '%s' "$UPTIME" | cut -d',' -f1)
 cat <<EOF
 
 ======================================================================
-                         SBX ${SBX_VERSION}
-                 Sing-box Manager for Linux Server
+ SBX ${SBX_CURRENT_VERSION}  |  Sing-box ${VERSION}  |  最新 ${LATEST_VERSION}
 ======================================================================
-
-【系统信息】
-
- 主机名称      : ${HOSTNAME}
- 操作系统      : ${OS}
- 内核版本      : ${KERNEL}
- 虚拟化        : ${VIRT}
- CPU           : ${CPU_MODEL}
- CPU核心       : ${CPU_CORE}
- 内存          : ${MEM_USED} / ${MEM_TOTAL}
- IP地址        : ${IP}
- 系统运行      : ${UPTIME}
-
+ 主机 : ${HOSTNAME}  |  ${OS_SHORT}  |  内核 ${KERNEL}  |  ${VIRT}
+ CPU  : ${CPU_MODEL_SHORT}  |  ${CPU_CORE} 核  |  内存 ${MEM_USED}/${MEM_TOTAL}
+ IP   : ${IP}  |  运行 ${UPTIME_SHORT}
 ----------------------------------------------------------------------
-
-【Sing-box】
-
- 服务状态      : ${STATUS}
- 当前版本      : ${VERSION}
- 最新正式版    : ${LATEST_VERSION}
- 开机启动      : ${ENABLE}
- 配置状态      : ${CONFIG}
- 配置文件      : ${CONFIG_FILE}
- 路由模式      : ${ROUTE_MODE}
-
- CPU占用       : ${CPU_DISPLAY} %
- 内存占用      : ${MEM_DISPLAY} MB
-
- 网络状态      : ${NETWORK}
- TUN           : ${TUN_STATUS}
- IP Forward    : ${FORWARD_STATUS}
- Clash API     : ${CLASH_API}
- Zashboard     : ${ZASHBOARD}
- 配置链接      : ${CONFIG_URL_STATUS}
-
- SBX 管理器     : ${SBX_CURRENT_VERSION}
- SBX 最新版本   : ${SBX_LATEST_VERSION}
-
- 启动时间      : ${START_TIME}
-
-
-======================================================================
-
- 1. 安装/升级 Sing-box
-
- 2. 配置管理
-
- 3. 运行管理
-
- 4. 路由设置
-
- 5. 工具箱
-
- 6. Web 面板
-
- 7. 更新 SBX 管理器$([ "$SBX_UPDATE_AVAILABLE" -eq 1 ] && printf '（有新版本）' || printf '')
-
- 0. 退出
-
+ 服务 : ${STATUS}  |  开机 ${ENABLE}  |  配置 ${CONFIG}  |  ${ROUTE_MODE}
+ 负载 : CPU ${CPU_DISPLAY}%  |  内存 ${MEM_DISPLAY} MB  |  网络 ${NETWORK}
+ 功能 : TUN ${TUN_STATUS}  |  转发 ${FORWARD_STATUS}  |  Clash ${CLASH_API}
+ 面板 : Zashboard ${ZASHBOARD}  |  配置链接 ${CONFIG_URL_STATUS}
+ 版本 : SBX ${SBX_CURRENT_VERSION}  |  最新 ${SBX_LATEST_VERSION}
+----------------------------------------------------------------------
+ 1. 安装/升级 Sing-box    2. 配置管理    3. 运行管理
+ 4. 路由设置              5. 工具箱      6. Web 面板
+ 7. 更新 SBX 管理器       0. 退出
 ======================================================================
 
 EOF
@@ -326,35 +283,9 @@ DASHBOARD_DRAWN=1
 
 }
 
-# Update only the two numeric fields in the already rendered dashboard.
-# Rows are zero-based and match the fixed dashboard layout above.
+# Refresh the dashboard using the current metrics.
 refresh_dashboard_metrics(){
-    local cpu_use mem_use pid proc_ticks total_ticks delta_proc delta_total cores
-    pid=$(pidof sing-box 2>/dev/null | awk '{print $1}')
-
-    cpu_use=0
-    if [ -n "$pid" ] && [ -r "/proc/$pid/stat" ]; then
-        proc_ticks=$(awk '{print $14 + $15}' "/proc/$pid/stat" 2>/dev/null)
-        total_ticks=$(awk '/^cpu / {sum=0; for(i=2;i<=NF;i++) sum+=$i; print sum; exit}' /proc/stat)
-        if [ -n "${DASHBOARD_PREV_PROC_TICKS:-}" ] && \
-           [ -n "${DASHBOARD_PREV_TOTAL_TICKS:-}" ]; then
-            delta_proc=$((proc_ticks - DASHBOARD_PREV_PROC_TICKS))
-            delta_total=$((total_ticks - DASHBOARD_PREV_TOTAL_TICKS))
-            cores=$(nproc)
-            if [ "$delta_total" -gt 0 ]; then
-                cpu_use=$(awk -v p="$delta_proc" -v t="$delta_total" -v c="$cores" \
-                    'BEGIN {printf "%.1f", p * c * 100 / t}')
-            fi
-        fi
-        DASHBOARD_PREV_PROC_TICKS="$proc_ticks"
-        DASHBOARD_PREV_TOTAL_TICKS="$total_ticks"
-    fi
-
-    mem_use=$(ps -C sing-box -o rss= | awk '{sum+=$1} END{printf "%.1f",sum/1024}')
-    [ -n "$cpu_use" ] || cpu_use=0
-    [ -n "$mem_use" ] || mem_use=0
-
-    # Save the input cursor, update fixed-width fields, then restore it.
-    printf '\0337\033[29;18H%10.1f\033[30;18H%10.1f\0338' \
-        "$cpu_use" "$mem_use"
+    DASHBOARD_DRAWN=0
+    DASHBOARD_PROMPT_DRAWN=0
+    dashboard
 }
