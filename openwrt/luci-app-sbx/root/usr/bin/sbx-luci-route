@@ -33,16 +33,38 @@ clear_tun() {
 apply_tproxy() {
 	sysctl -w net.ipv4.ip_forward=1 >/dev/null
 	clear_tun
-	clear_tproxy
+	# 只清理 ip rule/route，nft 表交给下面的单事务原子替换，避免规则空窗
+	ip rule del fwmark "$tproxy_mark" table "$tproxy_table" 2>/dev/null || true
+	ip route flush table "$tproxy_table" 2>/dev/null || true
 	ip rule add fwmark "$tproxy_mark" table "$tproxy_table" priority 100 2>/dev/null || true
 	ip route add local 0.0.0.0/0 dev lo table "$tproxy_table"
-	nft add table inet sbx
-	nft add set inet sbx bypass4 '{ type ipv4_addr; flags interval; }'
-	nft add element inet sbx bypass4 '{ 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 }'
-	nft add chain inet sbx prerouting '{ type filter hook prerouting priority mangle; policy accept; }'
-	nft add rule inet sbx prerouting iifname != "$lan_if" return
-	nft add rule inet sbx prerouting ip daddr @bypass4 return
-	nft add rule inet sbx prerouting meta l4proto '{ tcp, udp }' meta mark set "$tproxy_mark" tproxy ip to 127.0.0.1:"$tproxy_port" accept
+	nft_file=$(mktemp /tmp/sbx-nft.XXXXXX) || { echo "cannot create nft temp file" >&2; exit 1; }
+	{
+		if nft list table inet sbx >/dev/null 2>&1; then
+			echo "delete table inet sbx"
+		fi
+		cat <<EOF
+table inet sbx {
+	set bypass4 {
+		type ipv4_addr
+		flags interval
+		elements = { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 }
+	}
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iifname != "$lan_if" return
+		ip daddr @bypass4 return
+		meta l4proto { tcp, udp } meta mark set $tproxy_mark tproxy ip to 127.0.0.1:$tproxy_port accept
+	}
+}
+EOF
+	} > "$nft_file"
+	if ! nft -f "$nft_file"; then
+		rm -f "$nft_file"
+		echo "nftables apply failed, previous table kept" >&2
+		exit 1
+	fi
+	rm -f "$nft_file"
 }
 
 apply_tun() {
