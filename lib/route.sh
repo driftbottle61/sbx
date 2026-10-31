@@ -152,7 +152,7 @@ prepare_singbox_route_config(){
 stop_sbx_route(){
     load_route_config
 
-    if command -v nft >/dev/null 2>&1; then
+    if [ "${SBX_KEEP_NFT:-0}" != "1" ] && command -v nft >/dev/null 2>&1; then
         nft delete table inet sbx >/dev/null 2>&1
     fi
 
@@ -177,13 +177,20 @@ start_sbx_route(){
     load_route_config
     get_lan_ipv4
     ensure_sbx_group
-    stop_sbx_route
 
     case "$ROUTE_MODE" in
         off|OFF|none)
+            stop_sbx_route
             ok "路由劫持已关闭"
             return 0
             ;;
+        *)
+            # 保留 nft 表，交由 start_sbx_nft 用单个事务原子替换，避免规则空窗
+            SBX_KEEP_NFT=1 stop_sbx_route
+            ;;
+    esac
+
+    case "$ROUTE_MODE" in
         tproxy|TProxy|TPROXY)
             ip route add local default dev lo table "$ROUTE_TABLE" 2>/dev/null || true
             ip rule add fwmark "$FW_MARK" table "$ROUTE_TABLE" 2>/dev/null || true
@@ -219,6 +226,7 @@ start_sbx_route(){
 
 start_sbx_nft(){
     local lan_ips reserved_ips dns_reserved_ips local_ips gid ports jump
+    local nft_file cn_file batch count cidr
 
     lan_ips="$(csv_from_words "$LAN_IPV4")"
     reserved_ips="$(csv_from_words "$RESERVED_IPV4")"
@@ -230,28 +238,6 @@ start_sbx_nft(){
     ports="$(echo "$PROXY_PORTS" | sed 's/,/, /g')"
 
     modprobe nft_tproxy >/dev/null 2>&1 || true
-    nft add table inet sbx
-
-    nft add chain inet sbx prerouting { type filter hook prerouting priority -150 \; }
-    nft add rule inet sbx prerouting tcp dport 53 return
-    nft add rule inet sbx prerouting udp dport 53 return
-    nft add rule inet sbx prerouting meta mark "$ROUTING_MARK" return
-    nft add rule inet sbx prerouting meta skgid "$gid" return
-    nft add rule inet sbx prerouting ip daddr { "$reserved_ips" } return
-    nft add rule inet sbx prerouting ip saddr != { "$lan_ips" } return
-
-    if [ "$COMMON_PORTS" = "ON" ]; then
-        nft add rule inet sbx prerouting ip daddr != 28.0.0.0/8 tcp dport != { "$ports" } return
-        nft add rule inet sbx prerouting ip daddr != 28.0.0.0/8 udp dport != { "$ports" } return
-    fi
-
-    if [ "$CN_IP_ROUTE" = "ON" ] && [ -s "$CN_IP_FILE" ]; then
-        nft add set inet sbx cn_ip { type ipv4_addr \; flags interval \; }
-        awk '{printf "%s, ", $1}' "$CN_IP_FILE" | sed 's/, $//' | while read -r cn_ip; do
-            [ -n "$cn_ip" ] && nft add element inet sbx cn_ip { "$cn_ip" }
-        done
-        nft add rule inet sbx prerouting ip daddr @cn_ip return
-    fi
 
     case "$ROUTE_MODE" in
         tproxy|TProxy|TPROXY)
@@ -260,21 +246,101 @@ start_sbx_nft(){
         tun|TUN)
             jump="meta l4proto { tcp, udp } mark set $FW_MARK"
             ;;
+        *)
+            jump=""
+            ;;
     esac
 
-    nft add rule inet sbx prerouting $jump
+    nft_file="$(mktemp /tmp/sbx-nft.XXXXXX 2>/dev/null)" || {
+        error "无法创建 nftables 临时文件"
+        return 1
+    }
 
-    if [ "$DNS_REDIR_PORT" != "off" ] && [ -n "$DNS_REDIR_PORT" ]; then
-        nft add chain inet sbx prerouting_dns { type nat hook prerouting priority -100 \; }
-        nft add rule inet sbx prerouting_dns meta mark "$ROUTING_MARK" return
-        nft add rule inet sbx prerouting_dns meta skgid "$gid" return
-        nft add rule inet sbx prerouting_dns ip saddr != { "$lan_ips" } return
-        nft add rule inet sbx prerouting_dns ip daddr { "$dns_reserved_ips" } return
-        nft add rule inet sbx prerouting_dns udp dport 53 redirect to "$DNS_REDIR_PORT"
-        nft add rule inet sbx prerouting_dns tcp dport 53 redirect to "$DNS_REDIR_PORT"
+    {
+        if nft list table inet sbx >/dev/null 2>&1; then
+            echo "delete table inet sbx"
+        fi
+        echo "table inet sbx {"
+        if [ "$CN_IP_ROUTE" = "ON" ] && [ -s "$CN_IP_FILE" ]; then
+            echo "  set cn_ip {"
+            echo "    type ipv4_addr"
+            echo "    flags interval"
+            echo "  }"
+        fi
+        echo "  chain prerouting {"
+        echo "    type filter hook prerouting priority -150; policy accept;"
+        echo "    tcp dport 53 return"
+        echo "    udp dport 53 return"
+        echo "    meta mark $ROUTING_MARK return"
+        echo "    meta skgid $gid return"
+        [ -n "$reserved_ips" ] && echo "    ip daddr { $reserved_ips } return"
+        [ -n "$lan_ips" ] && echo "    ip saddr != { $lan_ips } return"
+        if [ "$COMMON_PORTS" = "ON" ]; then
+            echo "    ip daddr != 28.0.0.0/8 tcp dport != { $ports } return"
+            echo "    ip daddr != 28.0.0.0/8 udp dport != { $ports } return"
+        fi
+        if [ "$CN_IP_ROUTE" = "ON" ] && [ -s "$CN_IP_FILE" ]; then
+            echo "    ip daddr @cn_ip return"
+        fi
+        echo "    $jump"
+        echo "  }"
+        if [ "$DNS_REDIR_PORT" != "off" ] && [ -n "$DNS_REDIR_PORT" ]; then
+            echo "  chain prerouting_dns {"
+            echo "    type nat hook prerouting priority -100; policy accept;"
+            echo "    meta mark $ROUTING_MARK return"
+            echo "    meta skgid $gid return"
+            [ -n "$lan_ips" ] && echo "    ip saddr != { $lan_ips } return"
+            [ -n "$dns_reserved_ips" ] && echo "    ip daddr { $dns_reserved_ips } return"
+            echo "    udp dport 53 redirect to $DNS_REDIR_PORT"
+            echo "    tcp dport 53 redirect to $DNS_REDIR_PORT"
+            echo "  }"
+        fi
+        echo "}"
+    } > "$nft_file" || {
+        rm -f "$nft_file"
+        error "生成 nftables 规则失败"
+        return 1
+    }
+
+    if ! nft -f "$nft_file"; then
+        rm -f "$nft_file"
+        error "nftables 规则加载失败，旧规则保持生效"
+        return 1
+    fi
+    rm -f "$nft_file"
+
+    if [ "$CN_IP_ROUTE" = "ON" ] && [ -s "$CN_IP_FILE" ]; then
+        cn_file="$(mktemp /tmp/sbx-cn.XXXXXX 2>/dev/null)" || cn_file=""
+        if [ -n "$cn_file" ]; then
+            batch=""
+            count=0
+            while IFS= read -r cidr; do
+                [ -n "$cidr" ] || continue
+                case "$cidr" in \#*) continue ;; esac
+                if [ -n "$batch" ]; then
+                    batch="$batch, $cidr"
+                else
+                    batch="$cidr"
+                fi
+                count=$((count + 1))
+                if [ "$count" -ge 200 ]; then
+                    printf 'add element inet sbx cn_ip { %s }\n' "$batch" > "$cn_file"
+                    nft -f "$cn_file" >/dev/null 2>&1 || warn "CN 网段批次加载失败，部分网段未生效"
+                    batch=""
+                    count=0
+                fi
+            done < "$CN_IP_FILE"
+            if [ -n "$batch" ]; then
+                printf 'add element inet sbx cn_ip { %s }\n' "$batch" > "$cn_file"
+                nft -f "$cn_file" >/dev/null 2>&1 || warn "CN 网段尾批加载失败"
+            fi
+            rm -f "$cn_file"
+        else
+            warn "无法创建 CN 网段临时文件，CN 直连规则将不完整"
+        fi
     fi
 
-    ok "nftables 路由规则已应用：$ROUTE_MODE"
+    ok "nftables 路由规则已原子应用：$ROUTE_MODE"
 }
 
 start_sbx_iptables(){
@@ -547,6 +613,7 @@ done
 }
 
 route_cli(){
+    load_route_config
     case "$1" in
         start)
             start_sbx_route
@@ -555,7 +622,7 @@ route_cli(){
             stop_sbx_route
             ;;
         restart)
-            stop_sbx_route
+            # start_sbx_route 内部已用 SBX_KEEP_NFT=1 清理 ip rule，并把 nft 表交给原子替换
             start_sbx_route
             ;;
         prepare-config)
