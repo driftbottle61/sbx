@@ -1,0 +1,21 @@
+#!/bin/sh
+#
+# Apply the SBX route policy after sing-box has created its tun device.
+# This runs as a separate procd instance, so stop/restart tears it down
+# together with sing-box and no detached retry loop is left behind.
+
+max_attempts=${SBX_ROUTE_APPLY_ATTEMPTS:-5}
+case "$max_attempts" in ''|*[!0-9]*) max_attempts=5 ;; esac
+
+attempt=1
+while :; do
+	if /usr/bin/sbx-luci-route apply; then
+		exit 0
+	fi
+	if [ "$attempt" -ge "$max_attempts" ]; then
+		logger -t sbx "route policy apply failed after $attempt attempts"
+		exit 1
+	fi
+	attempt=$((attempt + 1))
+	sleep 2
+done

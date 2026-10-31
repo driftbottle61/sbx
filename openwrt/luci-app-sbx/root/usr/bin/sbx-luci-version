@@ -19,14 +19,25 @@ latest_redirect_tag() {
 		sed -n 's#^[Ll]ocation: .*/tag/\([^[:space:]]*\).*#\1#p' | tail -n1
 }
 
+version_newer() {
+	[ -n "$1" ] && [ -n "$2" ] && [ "$1" != "$2" ] || return 1
+	[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+}
+
 case "$kind" in
 singbox)
     local=$(/usr/bin/sing-box version 2>/dev/null | sed -n 's/.*sing-box version \([^ ]*\).*/\1/p'); local=${local:-unknown}
     latest=$(curl_text 'https://api.github.com/repos/SagerNet/sing-box/tags?per_page=100' 2>/dev/null | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\(v[0-9][0-9.]*\)".*/\1/p' | sort -V | tail -n1 || true)
     [ -n "$latest" ] || latest=$(latest_redirect_tag SagerNet/sing-box)
     [ -n "$latest" ] || latest='unknown'
-    cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
-    [ "$latest" = unknown ] && update=false
+    latest_num=${latest#v}
+    if [ "$latest" = unknown ] || [ "$local" = unknown ]; then
+        update=false
+    elif version_newer "$latest_num" "$local"; then
+        update=true
+    else
+        update=false
+    fi
     case "$local" in unknown) local_json='unknown' ;; *) local_json="v$local" ;; esac
     case "$latest" in unknown) latest_json='unknown' ;; *) latest_json="$latest" ;; esac
     printf '{"local":"%s","latest":"%s","update_available":%s}\n' "$local_json" "$latest_json" "$update"
@@ -48,7 +59,13 @@ sbx)
         esac
     fi
     [ -n "$latest" ] || latest='unknown'
-    cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
+    if [ "$latest" = unknown ] || [ "$local" = unknown ]; then
+        update=false
+    elif version_newer "$latest" "$local"; then
+        update=true
+    else
+        update=false
+    fi
     case "$local" in unknown) local_json='unknown' ;; *) local_json="v$local" ;; esac
     case "$latest" in unknown) latest_json='unknown' ;; *) latest_json="v$latest" ;; esac
     printf '{"local":"%s","latest":"%s","update_available":%s,"update_kind":"sbx"}\n' "$local_json" "$latest_json" "$update"

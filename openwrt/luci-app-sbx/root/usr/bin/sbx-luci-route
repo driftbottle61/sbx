@@ -73,13 +73,17 @@ apply_tun() {
 	clear_tun
 	tun_if=$(detect_tun_interface)
 	[ -n "$tun_if" ] || { echo "tun interface not found in config" >&2; exit 1; }
+	pidof sing-box >/dev/null 2>&1 || { echo "sing-box is not running" >&2; exit 1; }
+	wait_tries=${SBX_ROUTE_WAIT_TRIES:-60}
+	case "$wait_tries" in ''|*[!0-9]*) wait_tries=60 ;; esac
 	tries=0
 	while ! ip link show "$tun_if" >/dev/null 2>&1; do
 		tries=$((tries + 1))
-		[ "$tries" -le 20 ] || { echo "tun interface $tun_if is not up" >&2; exit 1; }
+		[ "$tries" -le "$wait_tries" ] || { echo "tun interface $tun_if is not up" >&2; exit 1; }
 		sleep 1
 	done
 	ip link show "$tun_if" >/dev/null 2>&1 || { echo "tun interface $tun_if is not up" >&2; exit 1; }
+	pidof sing-box >/dev/null 2>&1 || { echo "sing-box stopped before route apply" >&2; exit 1; }
 	ip rule add iif "$lan_if" table "$tun_table" priority 101 2>/dev/null || true
 	ip route add default dev "$tun_if" table "$tun_table"
 }
