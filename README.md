@@ -18,10 +18,10 @@ With `wget`:
 wget -qO- https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh | sudo bash
 ```
 
-Install the fixed `v1.2.39` release as `root`:
+Install the fixed `v1.2.40` release as `root`:
 
 ```bash
-curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.39/install-oneclick.sh | bash
+curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.40/install-oneclick.sh | bash
 ```
 
 Then start the manager:
@@ -64,7 +64,7 @@ SBX_DOWNLOAD_PROXY=off sbx
 
 ```bash
 curl -fsSL https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh \
-  | sudo bash -s -- --ref v1.2.39
+  | sudo bash -s -- --ref v1.2.40
 ```
 
 ```bash
