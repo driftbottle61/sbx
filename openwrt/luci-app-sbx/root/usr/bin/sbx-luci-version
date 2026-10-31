@@ -3,13 +3,14 @@ set -eu
 kind="${1:-singbox}"
 curl_text() {
 	url="$1"
+	curl -fsSL --connect-timeout 5 --max-time 10 "$url" 2>/dev/null && return 0
 	if curl -fsS --connect-timeout 3 -x http://127.0.0.1:8080 https://api.github.com/rate_limit >/dev/null 2>&1; then
-		curl -fsSL -x http://127.0.0.1:8080 --connect-timeout 10 "$url"
-	elif curl -fsS --connect-timeout 3 --socks5-hostname 127.0.0.1:1080 https://api.github.com/rate_limit >/dev/null 2>&1; then
-		curl -fsSL --socks5-hostname 127.0.0.1:1080 --connect-timeout 10 "$url"
-	else
-		curl -fsSL --connect-timeout 10 "$url"
+		curl -fsSL -x http://127.0.0.1:8080 --connect-timeout 10 "$url" 2>/dev/null && return 0
 	fi
+	if curl -fsS --connect-timeout 3 --socks5-hostname 127.0.0.1:1080 https://api.github.com/rate_limit >/dev/null 2>&1; then
+		curl -fsSL --socks5-hostname 127.0.0.1:1080 --connect-timeout 10 "$url" 2>/dev/null && return 0
+	fi
+	return 1
 }
 latest_redirect_tag() {
 
@@ -19,7 +20,18 @@ latest_redirect_tag() {
 }
 
 case "$kind" in
-singbox) local=$(/usr/bin/sing-box version 2>/dev/null | sed -n 's/.*sing-box version \([^ ]*\).*/\1/p'); local=${local:-unknown}; repo='SagerNet/sing-box' ;;
+singbox)
+    local=$(/usr/bin/sing-box version 2>/dev/null | sed -n 's/.*sing-box version \([^ ]*\).*/\1/p'); local=${local:-unknown}
+    latest=$(curl_text 'https://api.github.com/repos/SagerNet/sing-box/tags?per_page=100' 2>/dev/null | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\(v[0-9][0-9.]*\)".*/\1/p' | sort -V | tail -n1 || true)
+    [ -n "$latest" ] || latest=$(latest_redirect_tag SagerNet/sing-box)
+    [ -n "$latest" ] || latest='unknown'
+    cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
+    [ "$latest" = unknown ] && update=false
+    case "$local" in unknown) local_json='unknown' ;; *) local_json="v$local" ;; esac
+    case "$latest" in unknown) latest_json='unknown' ;; *) latest_json="$latest" ;; esac
+    printf '{"local":"%s","latest":"%s","update_available":%s}\n' "$local_json" "$latest_json" "$update"
+    exit 0
+    ;;
 sbx)
     local=$(apk list --installed 2>/dev/null | sed -n 's/^luci-app-sbx-\([^ ]*\) .*/\1/p' | head -n1 || true)
     [ -n "$local" ] || local='unknown'
@@ -28,7 +40,13 @@ sbx)
     # artifact. Use tags so the checker also works before a GitHub Release is
     # created for a revision.
     latest=$(curl_text 'https://api.github.com/repos/driftbottle61/sbx/tags?per_page=100' 2>/dev/null | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\(openwrt-v[0-9.]*-r[0-9][0-9]*\)".*/\1/p' | sed 's/^openwrt-v//' | sort -V | tail -n1 || true)
-    [ -n "$latest" ] || latest=$(latest_redirect_tag driftbottle61/sbx | sed 's/^openwrt-v//')
+    if [ -z "$latest" ]; then
+        tag=$(latest_redirect_tag driftbottle61/sbx)
+        case "$tag" in
+            openwrt-v*) latest=${tag#openwrt-v} ;;
+            *) latest='' ;;
+        esac
+    fi
     [ -n "$latest" ] || latest='unknown'
     cmp="$latest"; [ "${cmp#v}" = "$local" ] && update=false || update=true
     case "$local" in unknown) local_json='unknown' ;; *) local_json="v$local" ;; esac
