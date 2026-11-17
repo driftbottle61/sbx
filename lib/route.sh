@@ -53,8 +53,15 @@ ensure_sbx_group(){
 }
 
 get_lan_ipv4(){
-    LAN_IPV4="$(ip route show scope link | grep -Ev 'wan|utun|iot|docker|podman|virbr|vnet|ovs|vmbr|veth|vmnic|vboxnet|lxcbr|xenbr|vEthernet|linkdown' | awk '{print $1}' | tr '\n' ' ' | sed 's/ $//')"
-    [ -z "$LAN_IPV4" ] && LAN_IPV4="192.168.0.0/16 10.0.0.0/8 172.16.0.0/12"
+    local auto_lan
+    auto_lan="$(ip route show scope link | grep -Ev 'wan|utun|iot|docker|podman|virbr|vnet|ovs|vmbr|veth|vmnic|vboxnet|lxcbr|xenbr|vEthernet|linkdown' | awk '{print $1}' | tr '\n' ' ' | sed 's/ $//')"
+    [ -z "$auto_lan" ] && auto_lan="192.168.0.0/16 10.0.0.0/8 172.16.0.0/12"
+    if [ -n "${LAN_IPV4_ALLOW:-}" ]; then
+        LAN_IPV4="$LAN_IPV4_ALLOW"
+    else
+        LAN_IPV4="$auto_lan ${LAN_IPV4_EXTRA:-}"
+    fi
+    LAN_IPV4="$(echo "$LAN_IPV4" | tr " " "\n" | awk "NF && !seen[\$0]++" | tr "\n" " " | sed "s/ $//")"
 
     LOCAL_IPV4="$(ip route 2>/dev/null | grep -Ev 'utun|iot|docker|linkdown' | grep -Eo 'src [0-9.]+' | awk '{print $2}' | sort -u | tr '\n' ' ' | sed 's/ $//')"
     [ -z "$LOCAL_IPV4" ] && LOCAL_IPV4="127.0.0.0/8"
@@ -413,6 +420,9 @@ show_route_status(){
     echo "TPROXY_PORT=$TPROXY_PORT"
     echo "DNS_REDIR_PORT=$DNS_REDIR_PORT"
     echo "TUN_NAME=$TUN_NAME"
+    echo "LAN_IPV4_ALLOW=${LAN_IPV4_ALLOW:-自动}"
+    get_lan_ipv4
+    echo "有效内网网段=$LAN_IPV4"
 
     echo
     echo "========== ip rule =========="
@@ -430,6 +440,171 @@ show_route_status(){
     echo "========== iptables SBX =========="
     iptables -w -t mangle -S SBX_MARK 2>/dev/null || true
     iptables -w -t nat -S SBX_DNS 2>/dev/null || true
+}
+
+lan_access_menu(){
+    local choice idx cidr item list i total
+    while true
+    do
+        load_route_config
+        get_lan_ipv4
+        clear
+        echo
+        echo "================================"
+        echo "      内网允许网段（代理）"
+        echo "================================"
+        echo
+        echo "当前模式：$ROUTE_MODE"
+        if [ -n "${LAN_IPV4_ALLOW:-}" ]; then
+            echo "列表来源：手动列表"
+        else
+            echo "列表来源：自动检测 + LAN_IPV4_EXTRA"
+        fi
+        echo
+        i=1
+        total=0
+        for item in $LAN_IPV4; do
+            printf '  %d. %s\n' "$i" "$item"
+            i=$((i + 1))
+            total=$((total + 1))
+        done
+        [ "$total" -eq 0 ] && echo "  （空）"
+        echo
+        echo "1. 添加允许网段"
+        echo "2. 删除允许网段"
+        echo "3. 恢复自动检测（清除手动列表）"
+        echo "0. 返回"
+        echo
+        echo "================================"
+        read -p "请选择：" choice
+
+        case "$choice" in
+            1)
+                read -p "请输入网段（如 192.168.66.0/24）：" cidr
+                if ! cidr="$(normalize_lan_cidr "$cidr")"; then
+                    warn "网段格式无效"
+                    pause
+                    continue
+                fi
+                list="$(echo "$LAN_IPV4 $cidr" | tr " " "\n" | awk "NF && !seen[\$0]++" | tr "\n" " " | sed "s/^ *//;s/ *$//")"
+                if [ "$list" = "$LAN_IPV4" ]; then
+                    warn "该网段已存在"
+                    pause
+                    continue
+                fi
+                if save_lan_allowlist "$list"; then
+                    apply_lan_allowlist
+                else
+                    warn "保存失败"
+                fi
+                pause
+                ;;
+            2)
+                read -p "请输入要删除的序号：" idx
+                case "$idx" in
+                    ''|*[!0-9]*)
+                        warn "序号无效"
+                        pause
+                        continue
+                        ;;
+                esac
+                if [ "$idx" -lt 1 ] || [ "$idx" -gt "$total" ]; then
+                    warn "序号超出范围"
+                    pause
+                    continue
+                fi
+                list=""
+                i=1
+                for item in $LAN_IPV4; do
+                    if [ "$i" -ne "$idx" ]; then
+                        list="$list $item"
+                    fi
+                    i=$((i + 1))
+                done
+                list="$(echo "$list" | sed "s/^ *//;s/ *$//")"
+                if [ -z "$list" ]; then
+                    warn "至少保留一个网段；如需完全关闭代理，请把路由模式切为 off"
+                    pause
+                    continue
+                fi
+                read -p "删除后该网段将不再走代理，确认？[y/N]：" choice
+                case "$choice" in
+                    y|Y|yes|YES) ;;
+                    *) continue ;;
+                esac
+                if save_lan_allowlist "$list"; then
+                    apply_lan_allowlist
+                else
+                    warn "保存失败"
+                fi
+                pause
+                ;;
+            3)
+                clear_lan_allowlist
+                apply_lan_allowlist
+                pause
+                ;;
+            0)
+                return
+                ;;
+            *)
+                warn "输入错误"
+                pause
+                ;;
+        esac
+    done
+}
+
+normalize_lan_cidr(){
+    local raw ip mask octet
+    raw="$(echo "$1" | tr -d "[:space:]")"
+    [ -z "$raw" ] && return 1
+    case "$raw" in
+        */*) ip="${raw%/*}"; mask="${raw#*/}" ;;
+        *) ip="$raw"; mask="32" ;;
+    esac
+    case "$mask" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    [ "$mask" -ge 1 ] 2>/dev/null && [ "$mask" -le 32 ] 2>/dev/null || return 1
+    [[ "$ip" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
+    for octet in "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[4]}"; do
+        [ "$octet" -le 255 ] 2>/dev/null || return 1
+    done
+    echo "$ip/$mask"
+}
+
+save_lan_allowlist(){
+    local list
+    list="$(echo "$1" | tr " " "\n" | awk "NF && !seen[\$0]++" | tr "\n" " " | sed "s/^ *//;s/ *$//")"
+    [ -z "$list" ] && return 1
+    if grep -q "^LAN_IPV4_ALLOW=" "$route_config_file" 2>/dev/null; then
+        sed -i "s|^LAN_IPV4_ALLOW=.*|LAN_IPV4_ALLOW=\"$list\"|" "$route_config_file"
+    else
+        printf "\nLAN_IPV4_ALLOW=\"%s\"\n" "$list" >> "$route_config_file"
+    fi
+    LAN_IPV4_ALLOW="$list"
+    LAN_IPV4="$list"
+    ok "允许网段已保存：$list"
+}
+
+clear_lan_allowlist(){
+    sed -i "/^LAN_IPV4_ALLOW=/d" "$route_config_file" 2>/dev/null || true
+    LAN_IPV4_ALLOW=""
+    ok "已清除手动列表，恢复自动检测 + LAN_IPV4_EXTRA"
+}
+
+apply_lan_allowlist(){
+    if [ "$ROUTE_MODE" = "off" ] || [ "$ROUTE_MODE" = "OFF" ] || [ "$ROUTE_MODE" = "none" ]; then
+        warn "当前路由模式为 off，列表已保存，切回 tproxy/tun 后生效"
+        return 0
+    fi
+    if start_sbx_route; then
+        ok "已在 $ROUTE_MODE 模式下重新应用路由规则"
+    else
+        error "路由规则应用失败"
+        return 1
+    fi
 }
 
 save_route_mode(){
@@ -572,6 +747,8 @@ cat <<EOF
 
 5. 切换路由模式
 
+6. 内网允许网段
+
 0. 返回
 
 ================================
@@ -600,6 +777,9 @@ pause
 ;;
 5)
 set_route_mode
+;;
+6)
+lan_access_menu
 ;;
 0)
 return

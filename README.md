@@ -18,10 +18,10 @@ With `wget`:
 wget -qO- https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh | sudo bash
 ```
 
-Install the fixed `v1.2.40` release as `root`:
+Install the fixed `v1.2.41` release as `root`:
 
 ```bash
-curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.40/install-oneclick.sh | bash
+curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.41/install-oneclick.sh | bash
 ```
 
 Then start the manager:
@@ -60,11 +60,23 @@ SBX_DOWNLOAD_PROXY=off sbx
 
 面板配置在 `/etc/sbx-web/config.json`，权限为 `600`，升级不会覆盖。该文件含 AdGuard 密码及访问令牌，严禁提交到 Git。局域网访问时应保留随机令牌，并在 RouterOS 或反向代理侧限制可访问的设备。
 
+## 内网允许网段
+
+在 `sbx` 主菜单选择 `4. 路由设置`，再选择 `6. 内网允许网段`，可以查看、添加、删除允许通过代理的内网网段，也可以清除手动列表恢复自动检测。修改会按当前 `tproxy` 或 `tun` 模式立即重新应用路由规则，不需要重启 Sing-box。
+
+自动检测之外需要长期放行的网段，可写入 `/opt/sbx/data/sbx.conf`：
+
+```bash
+LAN_IPV4_EXTRA="192.168.88.0/24 192.168.50.0/24"
+```
+
+在菜单中增删后会改为手动列表 `LAN_IPV4_ALLOW`；选择“恢复自动检测”会删除该项，回到自动检测加 `LAN_IPV4_EXTRA`。
+
 ## Install a release or fork
 
 ```bash
 curl -fsSL https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh \
-  | sudo bash -s -- --ref v1.2.40
+  | sudo bash -s -- --ref v1.2.41
 ```
 
 ```bash
