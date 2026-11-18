@@ -4,6 +4,14 @@ readonly SBX_WEB_SERVICE="sbx-web.service"
 readonly SBX_WEB_CONFIG="/etc/sbx-web/config.json"
 readonly SBX_WEB_DEFAULT_CONFIG="/opt/sbx/data/sbx-web.json.example"
 
+if ! command -v write_managed_file >/dev/null 2>&1; then
+    write_managed_file(){
+        local file="$1"
+        mkdir -p "$(dirname "$file")" || return 1
+        cat > "$file"
+    }
+fi
+
 ensure_web_token() {
     local token
     [ -f "$SBX_WEB_CONFIG" ] || return 1
@@ -26,7 +34,8 @@ web_install() {
         chmod 600 "$SBX_WEB_CONFIG"
     fi
     ensure_web_token
-    cat > /etc/systemd/system/$SBX_WEB_SERVICE <<'EOF'
+    cat <<'EOF' | write_managed_file "/etc/systemd/system/$SBX_WEB_SERVICE"
+# Managed by SBX
 [Unit]
 Description=SBX Web Monitor
 After=network-online.target sing-box.service

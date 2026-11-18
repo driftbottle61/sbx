@@ -176,11 +176,15 @@ fi
 
 info "开始下载配置..."
 
+warn "订阅模板会整份覆盖当前 config.json；自定义节点/规则请放到 Sub-Store 模板中"
+
 mkdir -p "$CONFIG_DIR"
 
 if [ -f "$CONFIG_FILE" ];then
 
     cp "$CONFIG_FILE" "$CONFIG_BACKUP"
+    mkdir -p "${SBX_CONFIG_BACKUP_DIR:-/opt/sbx/backup/config}"
+    cp "$CONFIG_FILE" "${SBX_CONFIG_BACKUP_DIR:-/opt/sbx/backup/config}/config.json.$(date +%Y%m%d%H%M%S).bak" 2>/dev/null || true
 
 fi
 

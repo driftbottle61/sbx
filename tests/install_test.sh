@@ -63,4 +63,6 @@ test "$FIREWALL_BACKEND" = "nftables"
 test ! -e "$SBX_INSTALL_DIR"
 test ! -e "$SBX_BIN_DIR/sbx"
 
+bash "$project_dir/tests/config_preservation_test.sh"
+
 echo "install test passed"

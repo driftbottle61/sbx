@@ -1,6 +1,11 @@
 #!/bin/bash
 
 tools_backup_dir="/opt/sbx/backup/network"
+interfaces_file="${SBX_INTERFACES_FILE:-/etc/network/interfaces}"
+interfaces_dir="${SBX_INTERFACES_DIR:-/etc/network/interfaces.d}"
+netplan_dir="${SBX_NETPLAN_DIR:-/etc/netplan}"
+resolv_conf_file="${SBX_RESOLV_CONF:-/etc/resolv.conf}"
+systemd_network_dir="${SBX_SYSTEMD_NETWORK_DIR:-/etc/systemd/network}"
 
 detect_primary_iface(){
     ip route show default 2>/dev/null | awk '/default/ {for(i=1;i<=NF;i++){if($i=="dev"){print $(i+1); exit}}}'
@@ -30,11 +35,11 @@ get_current_dns(){
         }
     fi
 
-    awk '/^nameserver[[:space:]]+/ {print $2}' /etc/resolv.conf 2>/dev/null | xargs
+    awk '/^nameserver[[:space:]]+/ {print $2}' "$resolv_conf_file" 2>/dev/null | xargs
 }
 
 detect_network_backend(){
-    if command -v netplan >/dev/null 2>&1 && find /etc/netplan -maxdepth 1 \( -name '*.yaml' -o -name '*.yml' \) 2>/dev/null | grep -q .; then
+    if command -v netplan >/dev/null 2>&1 && find "$netplan_dir" -maxdepth 1 \( -name '*.yaml' -o -name '*.yml' \) 2>/dev/null | grep -q .; then
         echo "netplan"
         return
     fi
@@ -43,11 +48,11 @@ detect_network_backend(){
     # when systemd-networkd happens to be installed or running. Prefer it when
     # an interface stanza exists, otherwise the IP change is written to a file
     # that does not control the link.
-    if [ -f /etc/network/interfaces ] && grep -Eq '^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+' /etc/network/interfaces; then
+    if [ -f "$interfaces_file" ] && grep -Eq '^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+' "$interfaces_file"; then
         echo "ifupdown"
         return
     fi
-    if [ -d /etc/network/interfaces.d ] && find /etc/network/interfaces.d -type f -maxdepth 1 -print -exec grep -Eq '^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+' {} \; -print -quit | grep -q .; then
+    if [ -d "$interfaces_dir" ] && find "$interfaces_dir" -type f -maxdepth 1 -print -exec grep -Eq '^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+' {} \; -print -quit | grep -q .; then
         echo "ifupdown"
         return
     fi
@@ -61,7 +66,7 @@ detect_network_backend(){
 }
 
 get_netplan_file(){
-    find /etc/netplan -maxdepth 1 \( -name '*.yaml' -o -name '*.yml' \) 2>/dev/null | sort | head -1
+    find "$netplan_dir" -maxdepth 1 \( -name '*.yaml' -o -name '*.yml' \) 2>/dev/null | sort | head -1
 }
 
 is_ipv4(){
@@ -161,38 +166,82 @@ backup_network_config(){
             [ -f "$file" ] && cp "$file" "$tools_backup_dir/$(basename "$file").$stamp.bak"
             ;;
         systemd-networkd)
-            [ -d /etc/systemd/network ] && cp -a /etc/systemd/network "$tools_backup_dir/systemd-network.$stamp.bak"
+            [ -d "$systemd_network_dir" ] && cp -a "$systemd_network_dir" "$tools_backup_dir/systemd-network.$stamp.bak"
             ;;
         ifupdown)
-            [ -f /etc/network/interfaces ] && cp /etc/network/interfaces "$tools_backup_dir/interfaces.$stamp.bak"
-            [ -d /etc/network/interfaces.d ] && cp -a /etc/network/interfaces.d "$tools_backup_dir/interfaces.d.$stamp.bak"
+            [ -f "$interfaces_file" ] && cp "$interfaces_file" "$tools_backup_dir/interfaces.$stamp.bak"
+            [ -d "$interfaces_dir" ] && cp -a "$interfaces_dir" "$tools_backup_dir/interfaces.d.$stamp.bak"
             ;;
         resolv.conf)
-            [ -f /etc/resolv.conf ] && cp /etc/resolv.conf "$tools_backup_dir/resolv.conf.$stamp.bak"
+            [ -e "$resolv_conf_file" ] && cp -P "$resolv_conf_file" "$tools_backup_dir/resolv.conf.$stamp.bak"
             ;;
     esac
 }
 
 write_resolv_conf(){
-    local dns item
+    local dns item target
     dns="$(normalize_dns_list "$1")"
 
-    rm -f /etc/resolv.conf
-    : > /etc/resolv.conf
+    if [ -L "$resolv_conf_file" ]; then
+        target="$(readlink -f "$resolv_conf_file" 2>/dev/null || true)"
+        case "$target" in
+            /run/*|/etc/resolvconf/*)
+                warn "$resolv_conf_file 由系统解析器管理（$target），拒绝直接改写"
+                warn "请通过 systemd-resolved/resolvconf 或网络后端修改 DNS"
+                return 1
+                ;;
+            ""|"$resolv_conf_file")
+                warn "$resolv_conf_file 是无效或自引用的符号链接，拒绝改写"
+                return 1
+                ;;
+        esac
+        # 保留符号链接本身，直接写入其目标文件。
+    fi
+
+    mkdir -p "$(dirname "$resolv_conf_file")"
+    : > "$resolv_conf_file" || return 1
 
     for item in $dns; do
-        printf 'nameserver %s\n' "$item" >> /etc/resolv.conf
+        printf 'nameserver %s\n' "$item" >> "$resolv_conf_file"
     done
 }
 
+netplan_iface_file(){
+    local iface="$1" file
+    while IFS= read -r file; do
+        [ -n "$file" ] || continue
+        awk -v iface="$iface" '
+            /^[[:space:]]*ethernets:[[:space:]]*$/ { in_eth = 1; next }
+            in_eth && /^[^[:space:]]/ { in_eth = 0 }
+            in_eth {
+                line = $0
+                sub(/^[[:space:]]+/, "", line)
+                if (index(line, iface ":") == 1) { found = 1; exit }
+            }
+            END { exit(found ? 0 : 1) }
+        ' "$file" && { echo "$file"; return 0; }
+    done < <(find "$netplan_dir" -maxdepth 1 \( -name '*.yaml' -o -name '*.yml' \) 2>/dev/null | sort)
+    return 1
+}
+
 write_netplan_config(){
-    local iface ip_cidr gateway dns file item
+    local iface ip_cidr gateway dns file item existing
     iface="$1"
     ip_cidr="$2"
     gateway="$3"
     dns="$(normalize_dns_list "$4")"
-    file="$(get_netplan_file)"
-    [ -z "$file" ] && file="/etc/netplan/99-sbx-network.yaml"
+    file="$netplan_dir/99-sbx-$iface.yaml"
+    existing="$(netplan_iface_file "$iface" || true)"
+
+    mkdir -p "$netplan_dir"
+
+    # 不使用 get_netplan_file 覆盖第一个 YAML：那会静默删除其它网卡。
+    # 若接口已由其它 netplan 文件定义，明确拒绝，避免产生重复定义。
+    if [ -n "$existing" ] && [ "$existing" != "$file" ]; then
+        warn "接口 $iface 已在 $existing 中定义"
+        warn "为避免覆盖其它网卡，本次未写入；请手动修改该文件后重试"
+        return 1
+    fi
 
     cat > "$file" <<EOF
 network:
@@ -231,15 +280,11 @@ write_systemd_network_config(){
     ip_cidr="$2"
     gateway="$3"
     dns="$(normalize_dns_list "$4")"
-    file="/etc/systemd/network/10-sbx-$iface.network"
+    file="$systemd_network_dir/10-sbx-$iface.network"
 
-    mkdir -p /etc/systemd/network
+    mkdir -p "$systemd_network_dir"
 
-    # Remove stale SBX-generated profiles for the same interface so networkd
-    # cannot keep applying an older address alongside the new one.
-    find /etc/systemd/network -maxdepth 1 -type f \
-        -name '10-sbx-*.network' ! -name "10-sbx-$iface.network" -delete 2>/dev/null || true
-
+    # 只重写当前接口，保留其它 SBX/系统 networkd 配置。
     cat > "$file" <<EOF
 [Match]
 Name=$iface
@@ -255,8 +300,56 @@ EOF
     done
 }
 
+ifupdown_file_has_iface(){
+    local file="$1" iface="$2"
+    [ -f "$file" ] || return 1
+    awk -v target="$iface" '
+        {
+            line = $0
+            sub(/^[[:space:]]*/, "", line)
+            if (line ~ /^iface[[:space:]]+/) {
+                n = split(line, a, /[[:space:]]+/)
+                if (a[2] == target) found = 1
+            }
+        }
+        END { exit(found ? 0 : 1) }
+    ' "$file"
+}
+
+strip_ifupdown_iface(){
+    local file="$1" iface="$2"
+    awk -v target="$iface" '
+        {
+            line = $0
+            trimmed = line
+            sub(/^[[:space:]]*/, "", trimmed)
+
+            if (trimmed ~ /^(auto|allow-hotplug)[[:space:]]+/) {
+                n = split(trimmed, a, /[[:space:]]+/)
+                out = a[1]
+                kept = 0
+                for (i = 2; i <= n; i++) {
+                    if (a[i] != target) { out = out " " a[i]; kept++ }
+                }
+                if (kept > 0) print out
+                next
+            }
+
+            if (trimmed ~ /^iface[[:space:]]+/) {
+                n = split(trimmed, a, /[[:space:]]+/)
+                if (a[2] == target) { drop = 1; next }
+                drop = 0
+            } else if (trimmed ~ /^(source|mapping)[[:space:]]+/) {
+                drop = 0
+            }
+
+            if (!drop) print
+        }
+    ' "$file"
+}
+
 write_ifupdown_config(){
-    local iface ip_cidr gateway dns addr prefix netmask file
+    local iface ip_cidr gateway dns addr prefix netmask file tmp candidate
     iface="$1"
     ip_cidr="$2"
     gateway="$3"
@@ -264,36 +357,45 @@ write_ifupdown_config(){
     addr="${ip_cidr%/*}"
     prefix="${ip_cidr#*/}"
     netmask="$(cidr_to_netmask "$prefix")"
-    if [ -f /etc/network/interfaces ] && grep -Eq "^[[:space:]]*iface[[:space:]]+$iface[[:space:]]+inet[[:space:]]" /etc/network/interfaces; then
-        file="/etc/network/interfaces"
+    file=""
+
+    mkdir -p "$interfaces_dir"
+
+    # 优先原地更新已有的 iface stanza，保留文件中的 lo、vmbr、source
+    # 和其它网卡。只有完全找不到该接口时才新建 SBX 独立文件。
+    if ifupdown_file_has_iface "$interfaces_file" "$iface"; then
+        file="$interfaces_file"
     else
-        file="/etc/network/interfaces.d/sbx-$iface"
+        for candidate in "$interfaces_dir"/*; do
+            [ -f "$candidate" ] || continue
+            if ifupdown_file_has_iface "$candidate" "$iface"; then
+                file="$candidate"
+                break
+            fi
+        done
+    fi
+    [ -n "$file" ] || file="$interfaces_dir/sbx-$iface"
+
+    tmp="$(mktemp "${file}.tmp.XXXXXX")" || return 1
+    if [ -f "$file" ]; then
+        strip_ifupdown_iface "$file" "$iface" > "$tmp"
+        [ -s "$tmp" ] && printf '\n' >> "$tmp"
     fi
 
-    mkdir -p /etc/network/interfaces.d
-
-    # Remove stale SBX-generated ifupdown profiles for this interface. Leaving
-    # an older interfaces.d file causes Debian/PVE to load two addresses and
-    # makes the menu appear to have had no effect.
-    find /etc/network/interfaces.d -maxdepth 1 -type f \
-        -name 'sbx-*' ! -name "sbx-$iface" -delete 2>/dev/null || true
-
-    if [ "$file" = "/etc/network/interfaces" ]; then
-        cat > "$file" <<EOF
-auto lo
-iface lo inet loopback
-
-EOF
-    fi
-    cat >> "$file" <<EOF
+    cat >> "$tmp" <<EOF
+# Managed by SBX
 auto $iface
 iface $iface inet static
     address $addr
     netmask $netmask
 EOF
 
-    [ -n "$gateway" ] && printf '    gateway %s\n' "$gateway" >> "$file"
-    [ -n "$dns" ] && printf '    dns-nameservers %s\n' "$dns" >> "$file"
+    [ -n "$gateway" ] && printf '    gateway %s\n' "$gateway" >> "$tmp"
+    [ -n "$dns" ] && printf '    dns-nameservers %s\n' "$dns" >> "$tmp"
+
+    chmod 644 "$tmp" 2>/dev/null || true
+    cat "$tmp" > "$file"
+    rm -f "$tmp"
 }
 
 apply_network_config(){
@@ -359,8 +461,10 @@ save_network_config(){
         if command -v dhcpcd >/dev/null 2>&1; then
             dhcpcd -k "$iface" >/dev/null 2>&1 || true
         fi
-        if systemctl list-unit-files dhcpcd.service >/dev/null 2>&1; then
-            systemctl disable --now dhcpcd.service >/dev/null 2>&1 || true
+        # 只停止该接口的 dhcpcd 实例；不要全局 disable dhcpcd.service，
+        # 否则多网卡机器上其它接口会一起丢失 DHCP。
+        if systemctl list-unit-files "dhcpcd@$iface.service" >/dev/null 2>&1; then
+            systemctl disable --now "dhcpcd@$iface.service" >/dev/null 2>&1 || true
         fi
         pkill -f "dhcpcd: $iface" >/dev/null 2>&1 || true
     fi

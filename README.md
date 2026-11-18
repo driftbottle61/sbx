@@ -18,10 +18,10 @@ With `wget`:
 wget -qO- https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh | sudo bash
 ```
 
-Install the fixed `v1.2.42` release as `root`:
+Install the fixed `v1.2.43` release as `root`:
 
 ```bash
-curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.42/install-oneclick.sh | bash
+curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.43/install-oneclick.sh | bash
 ```
 
 Then start the manager:
@@ -62,7 +62,7 @@ SBX_DOWNLOAD_PROXY=off sbx
 
 ## 内网允许网段
 
-在 `sbx` 主菜单选择 `4. 路由设置`，再选择 `6. 内网允许网段`，可以查看、添加、删除允许通过代理的内网网段，也可以清除手动列表恢复自动检测。修改会按当前 `tproxy` 或 `tun` 模式立即重新应用路由规则，不需要重启 Sing-box。
+在 `sbx` 主菜单选择 `4. 路由设置`，再选择 `6. 内网允许网段`，可以查看、添加、删除允许通过代理的内网网段，也可以清除手动列表恢复自动检测。修改会写入 `config.json` 的 DNS 直连/拦截规则，并重启 Sing-box 使运行态立即生效（会有短暂中断）。
 
 自动检测之外需要长期放行的网段，可写入 `/opt/sbx/data/sbx.conf`：
 
@@ -76,7 +76,7 @@ LAN_IPV4_EXTRA="192.168.88.0/24 192.168.50.0/24"
 
 ```bash
 curl -fsSL https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh \
-  | sudo bash -s -- --ref v1.2.42
+  | sudo bash -s -- --ref v1.2.43
 ```
 
 ```bash

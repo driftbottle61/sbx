@@ -5,26 +5,27 @@ route_config_file="/opt/sbx/data/sbx.conf"
 load_route_config(){
     [ -f "$route_config_file" ] && source "$route_config_file"
 
-    [ -z "$ROUTE_MODE" ] && ROUTE_MODE="tproxy"
-    [ -z "$FIREWALL_BACKEND" ] && FIREWALL_BACKEND="nftables"
-    [ -z "$ROUTE_SCOPE" ] && ROUTE_SCOPE="lan"
-    [ -z "$FW_MARK" ] && FW_MARK="7893"
-    [ -z "$ROUTE_TABLE" ] && ROUTE_TABLE="100"
-    [ -z "$ROUTING_MARK" ] && ROUTING_MARK="$((FW_MARK + 2))"
-    [ -z "$MIX_PORT" ] && MIX_PORT="7890"
-    [ -z "$REDIR_PORT" ] && REDIR_PORT="7892"
-    [ -z "$TPROXY_PORT" ] && TPROXY_PORT="7893"
-    [ -z "$DNS_PORT" ] && DNS_PORT="1053"
-    [ -z "$DNS_REDIR_PORT" ] && DNS_REDIR_PORT="$DNS_PORT"
-    [ -z "$COMMON_PORTS" ] && COMMON_PORTS="ON"
-    [ -z "$PROXY_PORTS" ] && PROXY_PORTS="22,80,443,8080,8443"
-    [ -z "$TUN_NAME" ] && TUN_NAME="utun"
-    [ -z "$CN_IP_ROUTE" ] && CN_IP_ROUTE="ON"
-    [ -z "$CN_IP_FILE" ] && CN_IP_FILE="/opt/sbx/data/cn_ip.txt"
-    [ -z "$SBX_GROUP" ] && SBX_GROUP="sbx"
-    [ -z "$SBX_GID" ] && SBX_GID="7891"
+    : "${ROUTE_MODE:=tproxy}"
+    : "${FIREWALL_BACKEND:=nftables}"
+    : "${ROUTE_SCOPE:=lan}"
+    : "${FW_MARK:=7893}"
+    : "${ROUTE_TABLE:=100}"
+    : "${ROUTING_MARK:=$((FW_MARK + 2))}"
+    : "${MIX_PORT:=7890}"
+    : "${REDIR_PORT:=7892}"
+    : "${TPROXY_PORT:=7893}"
+    : "${DNS_PORT:=1053}"
+    : "${DNS_REDIR_PORT:=$DNS_PORT}"
+    : "${COMMON_PORTS:=ON}"
+    : "${PROXY_PORTS:=22,80,443,8080,8443}"
+    : "${TUN_NAME:=utun}"
+    : "${CN_IP_ROUTE:=ON}"
+    : "${CN_IP_FILE:=/opt/sbx/data/cn_ip.txt}"
+    : "${SBX_GROUP:=sbx}"
+    : "${SBX_GID:=7891}"
 
     detect_config_ports
+    return 0
 }
 
 detect_config_ports(){
@@ -35,20 +36,23 @@ detect_config_ports(){
     tproxy_port="$(jq -r '[.inbounds[]? | select(.type == "tproxy") | (.listen_port // .port)] | map(select(. != null)) | first // empty' "$CONFIG_FILE" 2>/dev/null)"
     dns_port="$(jq -r '[.inbounds[]? | select(.tag == "dns-in" or .type == "direct") | (.listen_port // .port)] | map(select(. != null)) | first // empty' "$CONFIG_FILE" 2>/dev/null)"
 
-    [ -n "$tproxy_port" ] && TPROXY_PORT="$tproxy_port"
-    [ -n "$dns_port" ] && DNS_PORT="$dns_port"
-    [ -z "$DNS_REDIR_PORT" ] && DNS_REDIR_PORT="$DNS_PORT"
+    [ -z "$tproxy_port" ] || TPROXY_PORT="$tproxy_port"
+    [ -z "$dns_port" ] || DNS_PORT="$dns_port"
+    : "${DNS_REDIR_PORT:=$DNS_PORT}"
+    return 0
 }
 
 ensure_sbx_group(){
-    if getent group "$SBX_GROUP" >/dev/null 2>&1; then
+    local group="${SBX_GROUP:-sbx}" gid="${SBX_GID:-7891}"
+
+    if getent group "$group" >/dev/null 2>&1; then
         return
     fi
 
     if command -v groupadd >/dev/null 2>&1; then
-        groupadd -g "$SBX_GID" "$SBX_GROUP" 2>/dev/null || groupadd "$SBX_GROUP"
+        groupadd -g "$gid" "$group" 2>/dev/null || groupadd "$group"
     else
-        echo "$SBX_GROUP:x:$SBX_GID:" >> /etc/group
+        echo "$group:x:$gid:" >> /etc/group
     fi
 }
 
@@ -77,6 +81,10 @@ csv_from_words(){
 prepare_singbox_route_config(){
     load_route_config
     get_lan_ipv4
+
+    # 调用方据此判断配置是否真的写入磁盘。保留原有返回码语义，
+    # 避免 ExecStartPre 因 jq 缺失等环境问题阻断 sing-box 启动。
+    SBX_ROUTE_CONFIG_APPLIED=0
 
     command -v jq >/dev/null 2>&1 || {
         warn "未找到 jq，跳过 sing-box 配置防回环修正"
@@ -147,13 +155,47 @@ prepare_singbox_route_config(){
         }
 
     if "$SINGBOX_BIN" check -c "$tmp" >/dev/null 2>&1; then
-        cp "$CONFIG_FILE" "$CONFIG_BACKUP" 2>/dev/null
+        if [ -f "$CONFIG_FILE" ]; then
+            cp "$CONFIG_FILE" "$CONFIG_BACKUP" 2>/dev/null || true
+            mkdir -p "${SBX_CONFIG_BACKUP_DIR:-/opt/sbx/backup/config}"
+            cp "$CONFIG_FILE" "${SBX_CONFIG_BACKUP_DIR:-/opt/sbx/backup/config}/config.json.$(date +%Y%m%d%H%M%S).bak" 2>/dev/null || true
+        fi
         mv "$tmp" "$CONFIG_FILE"
+        SBX_ROUTE_CONFIG_APPLIED=1
         ok "已应用 sing-box 防回环路由配置"
+        return 0
     else
         rm -f "$tmp"
         warn "修正后的配置未通过 sing-box check，保留原配置"
+        return 1
     fi
+}
+
+# 配置写入磁盘后必须重启 sing-box，否则运行态仍使用旧规则。
+# 没有 systemd 服务时退回到直接重建路由规则。
+reload_singbox_config(){
+    local service="${SERVICE_NAME:-sing-box}" i
+
+    if command -v systemctl >/dev/null 2>&1 && systemctl cat "$service" >/dev/null 2>&1; then
+        if ! systemctl restart "$service"; then
+            error "sing-box 重启失败，配置文件已更新但尚未生效"
+            journalctl -u "$service" -n 30 --no-pager 2>/dev/null || true
+            return 1
+        fi
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+            systemctl is-active --quiet "$service" && break
+            sleep 1
+        done
+        if systemctl is-active --quiet "$service"; then
+            ok "sing-box 已重启，新配置已生效"
+            return 0
+        fi
+        error "sing-box 重启后未处于运行状态"
+        journalctl -u "$service" -n 30 --no-pager 2>/dev/null || true
+        return 1
+    fi
+
+    start_sbx_route
 }
 
 stop_sbx_route(){
@@ -599,12 +641,20 @@ apply_lan_allowlist(){
         warn "当前路由模式为 off，列表已保存，切回 tproxy/tun 后生效"
         return 0
     fi
-    if start_sbx_route; then
-        ok "已在 $ROUTE_MODE 模式下重新应用路由规则"
-    else
-        error "路由规则应用失败"
+
+    # 先同步 config.json 中的 DNS 直连/拦截 CIDR。只重建 nft 规则不会
+    # 更新 sing-box 运行态，新增网段的 DNS 仍会被 private-dns-block 拦截。
+    if ! prepare_singbox_route_config || [ "${SBX_ROUTE_CONFIG_APPLIED:-0}" != "1" ]; then
+        error "sing-box 防回环配置未更新，允许网段未生效"
         return 1
     fi
+
+    if ! reload_singbox_config; then
+        error "sing-box 配置已写入，但重启失败；请检查服务日志"
+        return 1
+    fi
+
+    ok "已在 $ROUTE_MODE 模式下同步允许网段并重启 sing-box"
 }
 
 save_route_mode(){
@@ -764,11 +814,16 @@ pause
 ;;
 2)
 stop_sbx_route
-ok "路由规则已清理"
+ok "路由规则已清理（仅运行态；重启 sing-box 后会恢复）"
+warn "如需持久关闭代理，请在“切换路由模式”中选择 off"
 pause
 ;;
 3)
-prepare_singbox_route_config
+if prepare_singbox_route_config && [ "${SBX_ROUTE_CONFIG_APPLIED:-0}" = "1" ]; then
+    reload_singbox_config
+else
+    error "sing-box 防回环配置未更新，请检查 jq、配置文件和 sing-box check 结果"
+fi
 pause
 ;;
 4)

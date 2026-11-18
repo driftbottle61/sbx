@@ -85,20 +85,58 @@ create_directory(){
 # 开启转发
 ########################################
 
+set_sysctl_setting(){
+    local key="$1" value="$2" file="${SYSCTL_FILE:-/etc/sysctl.d/99-sbx.conf}" tmp
+
+    mkdir -p "$(dirname "$file")"
+    [ -f "$file" ] || : > "$file"
+    tmp="$(mktemp "${file}.tmp.XXXXXX")" || return 1
+
+    awk -v key="$key" -v value="$value" '
+        {
+            line = $0
+            sub(/^[[:space:]]*/, "", line)
+            split(line, parts, "=")
+            name = parts[1]
+            gsub(/[[:space:]]/, "", name)
+            if (name == key) {
+                if (!done) print key "=" value
+                done = 1
+                next
+            }
+            print
+        }
+        END {
+            if (!done) print key "=" value
+        }
+    ' "$file" > "$tmp" || {
+        rm -f "$tmp"
+        return 1
+    }
+
+    cat "$tmp" > "$file"
+    rm -f "$tmp"
+}
+
 enable_forward(){
 
     info "开启 IP Forward..."
 
-    cat >/etc/sysctl.d/99-sbx.conf <<EOF
-net.ipv4.ip_forward=1
-net.ipv6.conf.all.forwarding=1
-
-net.ipv4.conf.all.rp_filter=0
-net.ipv4.conf.default.rp_filter=0
-
-net.ipv4.conf.all.accept_local=1
-net.ipv4.conf.default.accept_local=1
-EOF
+    # 只维护 SBX 需要的键，保留用户或其它软件写入的 sysctl 配置。
+    local file="${SYSCTL_FILE:-/etc/sysctl.d/99-sbx.conf}"
+    local key
+    for key in \
+        net.ipv4.ip_forward \
+        net.ipv6.conf.all.forwarding \
+        net.ipv4.conf.all.rp_filter \
+        net.ipv4.conf.default.rp_filter \
+        net.ipv4.conf.all.accept_local \
+        net.ipv4.conf.default.accept_local; do
+        set_sysctl_setting "$key" 1 || {
+            error "写入 $file 失败"
+            return 1
+        }
+    done
 
     sysctl --system >/dev/null
 
@@ -134,17 +172,16 @@ optimize_dns(){
     mkdir -p /opt/sbx/backup
 
     if [ ! -f /opt/sbx/backup/resolv.conf.bak ]; then
-
-        cp /etc/resolv.conf \
-        /opt/sbx/backup/resolv.conf.bak 2>/dev/null
-
+        # 同时保留符号链接本身和它指向的内容，便于恢复。
+        cp -P /etc/resolv.conf /opt/sbx/backup/resolv.conf.link.bak 2>/dev/null || true
+        cp /etc/resolv.conf /opt/sbx/backup/resolv.conf.bak 2>/dev/null || true
     fi
 
-    systemctl disable systemd-resolved --now
+    systemctl disable systemd-resolved --now 2>/dev/null || true
 
     rm -f /etc/resolv.conf
 
-cat >/etc/resolv.conf <<EOF
+    cat >/etc/resolv.conf <<EOF
 nameserver 223.5.5.5
 nameserver 1.1.1.1
 EOF
@@ -277,10 +314,9 @@ system_init(){
 
     enable_forward
 
-    optimize_dns
-
     check_tun
 
+    info "DNS 未被自动修改；如需优化，请使用菜单 4"
     ok "系统初始化完成"
 
 }
