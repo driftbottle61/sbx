@@ -18,10 +18,10 @@ With `wget`:
 wget -qO- https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh | sudo bash
 ```
 
-Install the fixed `v1.2.46` release as `root`:
+Install the fixed `v1.2.47` release as `root`:
 
 ```bash
-curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.46/install-oneclick.sh | bash
+curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.47/install-oneclick.sh | bash
 ```
 
 Then start the manager:
@@ -76,7 +76,7 @@ LAN_IPV4_EXTRA="192.168.88.0/24 192.168.50.0/24"
 
 ```bash
 curl -fsSL https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh \
-  | sudo bash -s -- --ref v1.2.46
+  | sudo bash -s -- --ref v1.2.47
 ```
 
 ```bash

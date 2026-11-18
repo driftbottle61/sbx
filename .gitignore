@@ -1,2 +1,10 @@
+*.bak
+*.log
+backup/*
+log/*
+tmp/*
+!backup/.gitkeep
+!log/.gitkeep
+!tmp/.gitkeep
 __pycache__/
 *.pyc
