@@ -185,8 +185,32 @@ install_latest() {
     fi
 }
 
+get_latest_sbx_version() {
+    local latest="${DASH_SBX_LATEST:-${SBX_LATEST_VERSION:-}}" cache_file json
+
+    latest="${latest#v}"
+    if ! [[ "$latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        cache_file="${DASH_CACHE_DIR:-${SBX_DASHBOARD_CACHE_DIR:-/opt/sbx/data}}/version-cache"
+        latest="$(sed -n 's/^sbx=v*//p' "$cache_file" 2>/dev/null | head -n1)"
+    fi
+
+    json="$(SBX_DOWNLOAD_TIMEOUT=20 sbx_curl -sS \
+        'https://api.github.com/repos/driftbottle61/sbx/tags?per_page=100' 2>/dev/null || true)"
+    if printf '%s' "$json" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        latest="$(printf '%s' "$json" \
+            | jq -r '.[].name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' \
+            | sort -V | tail -n1)"
+    fi
+
+    latest="${latest#v}"
+    [[ "$latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && printf 'v%s\n' "$latest"
+}
+
 update_sbx() {
-    local current_version="${SBX_VERSION:-未知}" latest_version="${SBX_LATEST_VERSION:-未知}" installer
+    local current_version="${SBX_VERSION:-未知}" latest_version installer
+
+    latest_version="$(get_latest_sbx_version)"
+    [ -n "$latest_version" ] || latest_version="未知"
 
     [ "$current_version" = "未知" ] || current_version="v${current_version#v}"
     [ "$latest_version" = "未知" ] || latest_version="v${latest_version#v}"
