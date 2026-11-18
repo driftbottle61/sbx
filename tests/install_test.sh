@@ -73,6 +73,7 @@ test ! -e /tmp/sbx-injected-c
 test "$EVIL" = 'x"; touch /tmp/sbx-injected-a; #$HOME `touch /tmp/sbx-injected-b` $(touch /tmp/sbx-injected-c) \ end'
 
 bash "$project_dir/tests/route_logic_test.sh"
+bash "$project_dir/tests/dashboard_test.sh"
 
 "$SBX_INSTALL_DIR/uninstall.sh"
 test ! -e "$SBX_INSTALL_DIR"

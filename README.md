@@ -18,10 +18,10 @@ With `wget`:
 wget -qO- https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh | sudo bash
 ```
 
-Install the fixed `v1.2.47` release as `root`:
+Install the fixed `v1.2.48` release as `root`:
 
 ```bash
-curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.47/install-oneclick.sh | bash
+curl -fsSL https://github.com/driftbottle61/sbx/releases/download/v1.2.48/install-oneclick.sh | bash
 ```
 
 Then start the manager:
@@ -52,6 +52,12 @@ Force direct downloads:
 SBX_DOWNLOAD_PROXY=off sbx
 ```
 
+## CLI 面板
+
+`sbx` 主界面按终端宽度自适应，分区显示服务状态、代理模式、直连/代理连通性、CPU、Sing-box RSS、系统内存、版本更新和功能检查。版本与网络探测会缓存到 `/opt/sbx/data` 并在后台刷新，首屏不再等待 GitHub；面板刷新采用原地重绘，不会整屏闪烁。
+
+如终端或主题不适合彩色输出，可设置 `SBX_DASHBOARD_COLOR=never`；`NO_COLOR` 也会自动关闭颜色。
+
 ## Web 面板
 
 在 `sbx` 主菜单选择 `6. Web 面板`，先执行“安装/更新服务”，再选择“配置面板与 AdGuard”。面板默认监听 `127.0.0.1:9096`；如需从局域网访问，将监听地址改为 `0.0.0.0`，随后菜单会显示带访问令牌的 URL。
@@ -76,7 +82,7 @@ LAN_IPV4_EXTRA="192.168.88.0/24 192.168.50.0/24"
 
 ```bash
 curl -fsSL https://github.com/driftbottle61/sbx/raw/refs/heads/main/install.sh \
-  | sudo bash -s -- --ref v1.2.47
+  | sudo bash -s -- --ref v1.2.48
 ```
 
 ```bash

@@ -29,10 +29,15 @@ if [ "${DASHBOARD_PROMPT_DRAWN:-0}" != "1" ]; then
     DASHBOARD_PROMPT_DRAWN=1
 fi
 if ! read -r -t 5 CHOICE; then
-    DASHBOARD_DRAWN=0
-    DASHBOARD_PROMPT_DRAWN=0
-    dashboard
-    continue
+    # On timeout bash leaves any partially typed input in CHOICE. Do not
+    # throw it away: the main menu accepts single digits, so a lone "1"
+    # typed just before the timeout is still a valid selection.
+    if [ -z "${CHOICE:-}" ]; then
+        DASHBOARD_DRAWN=0
+        DASHBOARD_PROMPT_DRAWN=0
+        dashboard
+        continue
+    fi
 fi
 
 DASHBOARD_DRAWN=0
