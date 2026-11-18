@@ -31,7 +31,7 @@ setup_download_proxy() {
     if [ "$proxy" = "off" ] || [ "$proxy" = "direct" ]; then
         unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
         export SBX_DOWNLOAD_PROXY_READY=1
-        info "下载使用直连"
+        info "下载使用直连" >&2
         return 0
     fi
 
@@ -47,9 +47,9 @@ setup_download_proxy() {
         export HTTPS_PROXY="$proxy"
         export no_proxy="${no_proxy:-127.0.0.1,localhost,::1}"
         export NO_PROXY="$no_proxy"
-        info "下载代理：$proxy"
+        info "下载代理：$proxy" >&2
     else
-        info "未检测到下载代理，使用直连"
+        info "未检测到下载代理，使用直连" >&2
     fi
 
     export SBX_DOWNLOAD_PROXY_READY=1

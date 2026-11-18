@@ -313,14 +313,31 @@ first_install_setup(){
 
 show_release_list() {
 
+    local api_url="https://api.github.com/repos/SagerNet/sing-box/tags?per_page=20"
+    local json api_message
+
     echo
 
     info "最近20个版本"
 
-    sbx_curl -s \
-    https://api.github.com/repos/SagerNet/sing-box/releases \
-    | jq -r '.[].tag_name' \
-    | head -20
+    if ! json=$(sbx_curl -sS "$api_url" 2>/dev/null) || [ -z "$json" ]; then
+        error "获取版本列表失败：GitHub API 无响应"
+        pause
+        return 1
+    fi
+
+    if ! printf '%s\n' "$json" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        api_message=$(printf '%s\n' "$json" | jq -r '.message // empty' 2>/dev/null)
+        if [ -n "$api_message" ]; then
+            error "获取版本列表失败：$api_message"
+        else
+            error "获取版本列表失败：GitHub API 返回了非 JSON 内容（可能被代理或网络拦截）"
+        fi
+        pause
+        return 1
+    fi
+
+    printf '%s\n' "$json" | jq -r '.[].name'
 
     pause
 }
