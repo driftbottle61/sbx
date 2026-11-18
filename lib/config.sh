@@ -13,29 +13,53 @@ load_config(){
 }
 
 config_set(){
-    local key="$1" value="$2" file="${3:-$config_file}" escaped
+    local key="$1" value="$2" file="${3:-$config_file}" tmp
 
-    [ -f "$file" ] || : > "$file"
-    escaped="$(printf '%s' "$value" | sed 's/[\\&|]/\\&/g')"
-    if grep -q "^${key}=" "$file" 2>/dev/null; then
-        sed -i "s|^${key}=.*|${key}=\"${escaped}\"|" "$file"
-    else
-        printf '%s="%s"\n' "$key" "$value" >> "$file"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || {
+        error "非法配置项名称：$key"
+        return 1
+    }
+    [ -f "$file" ] || : > "$file" || return 1
+
+    tmp="$(mktemp "${file}.tmp.XXXXXX")" || return 1
+    if ! CONFIG_SET_KEY="$key" CONFIG_SET_VALUE="$value" awk '
+        BEGIN {
+            key = ENVIRON["CONFIG_SET_KEY"]
+            val = ENVIRON["CONFIG_SET_VALUE"]
+            gsub(/\r/, "", val)
+            gsub(/\n/, " ", val)
+            gsub(/\\/, "\\\\", val)
+            gsub(/"/, "\\\"", val)
+            gsub(/\$/, "\\$", val)
+            gsub(/`/, "\\`", val)
+            replacement = key "=\"" val "\""
+        }
+        index($0, key "=") == 1 { print replacement; found = 1; next }
+        { print }
+        END { if (!found) print replacement }
+    ' "$file" > "$tmp"; then
+        rm -f "$tmp"
+        return 1
     fi
+    cat "$tmp" > "$file" || { rm -f "$tmp"; return 1; }
+    rm -f "$tmp"
+    return 0
 }
 
 save_config_urls(){
-    config_set SBX_VERSION "$SBX_VERSION"
-    config_set CONFIG_DIR "$CONFIG_DIR"
-    config_set CONFIG_FILE "$CONFIG_FILE"
-    config_set CONFIG_BACKUP "$CONFIG_BACKUP"
-    config_set CONFIG_URL "$CONFIG_URL"
-    config_set CONFIG_URL_TPROXY "${CONFIG_URL_TPROXY:-}"
-    config_set CONFIG_URL_TUN "${CONFIG_URL_TUN:-}"
-    config_set SINGBOX_BIN "$SINGBOX_BIN"
-    config_set SERVICE_NAME "$SERVICE_NAME"
-    config_set SERVICE_FILE "$SERVICE_FILE"
-    config_set ROUTE_MODE "${ROUTE_MODE:-tproxy}"
+    local rc=0
+    config_set SBX_VERSION "$SBX_VERSION" || rc=1
+    config_set CONFIG_DIR "$CONFIG_DIR" || rc=1
+    config_set CONFIG_FILE "$CONFIG_FILE" || rc=1
+    config_set CONFIG_BACKUP "$CONFIG_BACKUP" || rc=1
+    config_set CONFIG_URL "$CONFIG_URL" || rc=1
+    config_set CONFIG_URL_TPROXY "${CONFIG_URL_TPROXY:-}" || rc=1
+    config_set CONFIG_URL_TUN "${CONFIG_URL_TUN:-}" || rc=1
+    config_set SINGBOX_BIN "$SINGBOX_BIN" || rc=1
+    config_set SERVICE_NAME "$SERVICE_NAME" || rc=1
+    config_set SERVICE_FILE "$SERVICE_FILE" || rc=1
+    config_set ROUTE_MODE "${ROUTE_MODE:-tproxy}" || rc=1
+    return "$rc"
 }
 
 set_config_url_value(){
@@ -55,7 +79,10 @@ echo
 [ -z "$ROUTE_MODE" ] && ROUTE_MODE="tproxy"
 
 CONFIG_URL="$URL"
-save_config_urls
+if ! save_config_urls; then
+    error "配置保存失败"
+    return 1
+fi
 
 ok "配置保存成功"
 
@@ -67,7 +94,10 @@ set_config_urls(){
     CONFIG_URL_TPROXY="$tproxy_url"
     CONFIG_URL_TUN="$tun_url"
     if [ "$ROUTE_MODE" = "tun" ]; then CONFIG_URL="$tun_url"; else CONFIG_URL="$tproxy_url"; fi
-    save_config_urls
+    if ! save_config_urls; then
+        error "配置保存失败"
+        return 1
+    fi
     ok "配置保存成功"
 }
 
@@ -107,7 +137,11 @@ else
     CONFIG_URL_TPROXY="$URL"
 fi
 CONFIG_URL="$URL"
-save_config_urls
+if ! save_config_urls; then
+    error "配置保存失败"
+    pause
+    return 1
+fi
 ok "配置保存成功"
 
 pause
@@ -189,11 +223,18 @@ if [ -f "$CONFIG_FILE" ];then
 fi
 
 
-sbx_curl "$CONFIG_URL" -o /tmp/config.json
+config_tmp="$(mktemp /tmp/sbx-config.XXXXXX)" || {
+    error "无法创建配置临时文件"
+    pause
+    return 1
+}
 
 
-if [ $? -ne 0 ];then
+url_escaped="$(printf '%s' "$CONFIG_URL" | sed 's/[\\"]/\\\\&/g')"
 
+if ! printf 'url = "%s"\n' "$url_escaped" | sbx_curl -K - -o "$config_tmp"; then
+
+    rm -f "$config_tmp"
     error "下载失败"
 
     pause
@@ -205,12 +246,10 @@ fi
 
 info "检查配置..."
 
-"$SINGBOX_BIN" check \
--c /tmp/config.json
+if ! "$SINGBOX_BIN" check \
+-c "$config_tmp"; then
 
-
-if [ $? -ne 0 ];then
-
+    rm -f "$config_tmp"
     error "配置检查失败"
 
     if [ -f "$CONFIG_BACKUP" ];then
@@ -226,7 +265,12 @@ if [ $? -ne 0 ];then
 fi
 
 
-mv /tmp/config.json "$CONFIG_FILE"
+if ! mv "$config_tmp" "$CONFIG_FILE"; then
+    rm -f "$config_tmp"
+    error "写入配置文件失败"
+    pause
+    return 1
+fi
 
 ok "配置更新成功"
 

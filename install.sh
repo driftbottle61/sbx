@@ -157,7 +157,12 @@ install_files() {
         "$source_dir/install.sh" "$source_dir/uninstall.sh" "$INSTALL_DIR/"
     install -d -m 0755 "$INSTALL_DIR/lib" "$INSTALL_DIR/data" "$INSTALL_DIR/web"
     install -m 0644 "$source_dir"/lib/*.sh "$INSTALL_DIR/lib/"
-    install -m 0644 "$source_dir/data/cn_ip.txt" "$INSTALL_DIR/data/cn_ip.txt"
+    # CN 列表可能由定时任务或手工维护，升级时只在缺失时安装默认值。
+    if [ ! -f "$INSTALL_DIR/data/cn_ip.txt" ]; then
+        install -m 0644 "$source_dir/data/cn_ip.txt" "$INSTALL_DIR/data/cn_ip.txt"
+    else
+        log "Preserved existing CN IP list"
+    fi
     install -m 0644 "$source_dir/data/sbx-web.json.example" "$INSTALL_DIR/data/sbx-web.json.example"
     install -m 0755 "$source_dir/web/sbx_web.py" "$INSTALL_DIR/web/sbx_web.py"
     install -m 0600 "$source_dir/data/sbx.conf" "$INSTALL_DIR/data/sbx.conf"
@@ -178,18 +183,31 @@ install_files() {
 
     # Refresh the unit on upgrades so post-start route/DNS hooks are installed
     # without requiring the user to recreate the service manually.
-    if systemctl cat sing-box.service >/dev/null 2>&1 && [ -f "$INSTALL_DIR/lib/service.sh" ]; then
+    if [ -f "$INSTALL_DIR/lib/service.sh" ]; then
         # The service template relies on paths kept in the preserved config.
         # Load values before sourcing/calling the service helpers under set -u.
         # shellcheck disable=SC1091
         source "$INSTALL_DIR/data/sbx.conf"
-        # shellcheck disable=SC1091
-        source "$INSTALL_DIR/lib/common.sh"
-        # shellcheck disable=SC1091
-        source "$INSTALL_DIR/lib/system.sh"
-        # shellcheck disable=SC1091
-        source "$INSTALL_DIR/lib/service.sh"
-        create_service
+        service_name="${SERVICE_NAME:-sing-box}"
+        if systemctl cat "$service_name" >/dev/null 2>&1; then
+            # shellcheck disable=SC1091
+            source "$INSTALL_DIR/lib/common.sh"
+            # shellcheck disable=SC1091
+            source "$INSTALL_DIR/lib/system.sh"
+            # shellcheck disable=SC1091
+            source "$INSTALL_DIR/lib/service.sh"
+            create_service
+            systemctl daemon-reload >/dev/null 2>&1 || true
+            if systemctl is-active --quiet "$service_name"; then
+                if systemctl restart "$service_name"; then
+                    log "Restarted $service_name to apply the updated unit"
+                else
+                    log "WARNING: failed to restart $service_name; new unit will apply on next start"
+                fi
+            else
+                log "$service_name is not running; updated unit will apply on next start"
+            fi
+        fi
     fi
 }
 

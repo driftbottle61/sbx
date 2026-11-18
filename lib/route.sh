@@ -213,6 +213,8 @@ stop_sbx_route(){
 
         iptables -w -t mangle -F SBX_MARK >/dev/null 2>&1
         iptables -w -t mangle -X SBX_MARK >/dev/null 2>&1
+        iptables -w -t mangle -F SBX_MARK_RULES >/dev/null 2>&1
+        iptables -w -t mangle -X SBX_MARK_RULES >/dev/null 2>&1
         iptables -w -t nat -F SBX_DNS >/dev/null 2>&1
         iptables -w -t nat -X SBX_DNS >/dev/null 2>&1
         iptables -w -D FORWARD -o "$TUN_NAME" -j ACCEPT >/dev/null 2>&1
@@ -275,7 +277,7 @@ start_sbx_route(){
 
 start_sbx_nft(){
     local lan_ips reserved_ips dns_reserved_ips local_ips gid ports jump
-    local nft_file cn_file batch count cidr
+    local nft_file cn_elements=""
 
     lan_ips="$(csv_from_words "$LAN_IPV4")"
     reserved_ips="$(csv_from_words "$RESERVED_IPV4")"
@@ -311,9 +313,24 @@ start_sbx_nft(){
         fi
         echo "table inet sbx {"
         if [ "$CN_IP_ROUTE" = "ON" ] && [ -s "$CN_IP_FILE" ]; then
+            # 一次性把全部网段写进初始事务，避免“表已提交但集合为空”的窗口。
+            cn_elements="$(awk '
+                {
+                    sub(/#.*/, "", $0)
+                    gsub(/[[:space:]]/, "", $0)
+                    if ($0 == "") next
+                    if ($0 !~ /^([0-9]{1,3}\.){3}[0-9]{1,3}(\/[0-9]{1,2})?$/) {
+                        printf "跳过无效 CN 网段：%s\n", $0 > "/dev/stderr"
+                        next
+                    }
+                    printf "%s%s", sep, $0
+                    sep = ", "
+                }
+            ' "$CN_IP_FILE")"
             echo "  set cn_ip {"
             echo "    type ipv4_addr"
             echo "    flags interval"
+            [ -n "$cn_elements" ] && echo "    elements = { $cn_elements }"
             echo "  }"
         fi
         echo "  chain prerouting {"
@@ -358,37 +375,6 @@ start_sbx_nft(){
     fi
     rm -f "$nft_file"
 
-    if [ "$CN_IP_ROUTE" = "ON" ] && [ -s "$CN_IP_FILE" ]; then
-        cn_file="$(mktemp /tmp/sbx-cn.XXXXXX 2>/dev/null)" || cn_file=""
-        if [ -n "$cn_file" ]; then
-            batch=""
-            count=0
-            while IFS= read -r cidr; do
-                [ -n "$cidr" ] || continue
-                case "$cidr" in \#*) continue ;; esac
-                if [ -n "$batch" ]; then
-                    batch="$batch, $cidr"
-                else
-                    batch="$cidr"
-                fi
-                count=$((count + 1))
-                if [ "$count" -ge 200 ]; then
-                    printf 'add element inet sbx cn_ip { %s }\n' "$batch" > "$cn_file"
-                    nft -f "$cn_file" >/dev/null 2>&1 || warn "CN 网段批次加载失败，部分网段未生效"
-                    batch=""
-                    count=0
-                fi
-            done < "$CN_IP_FILE"
-            if [ -n "$batch" ]; then
-                printf 'add element inet sbx cn_ip { %s }\n' "$batch" > "$cn_file"
-                nft -f "$cn_file" >/dev/null 2>&1 || warn "CN 网段尾批加载失败"
-            fi
-            rm -f "$cn_file"
-        else
-            warn "无法创建 CN 网段临时文件，CN 直连规则将不完整"
-        fi
-    fi
-
     ok "nftables 路由规则已原子应用：$ROUTE_MODE"
 }
 
@@ -399,32 +385,39 @@ start_sbx_iptables(){
     gid="$(getent group "$SBX_GROUP" | awk -F: '{print $3}')"
     [ -z "$gid" ] && gid="$SBX_GID"
 
-    iptables -w -t mangle -N SBX_MARK
-    iptables -w -t mangle -A SBX_MARK -p tcp --dport 53 -j RETURN
-    iptables -w -t mangle -A SBX_MARK -p udp --dport 53 -j RETURN
-    iptables -w -t mangle -A SBX_MARK -m mark --mark "$ROUTING_MARK" -j RETURN
+    iptables -w -t mangle -N SBX_MARK 2>/dev/null || true
+    iptables -w -t mangle -F SBX_MARK 2>/dev/null || true
+    iptables -w -t mangle -N SBX_MARK_RULES 2>/dev/null || true
+    iptables -w -t mangle -F SBX_MARK_RULES 2>/dev/null || true
 
+    # 多个 LAN 网段必须用“正向匹配后跳转”，不能为每个网段各写一条
+    # `! -s 网段 -j RETURN`：来自第二个网段的包会在第一条规则处被 RETURN。
     for ip in $LAN_IPV4; do
-        iptables -w -t mangle -A SBX_MARK ! -s "$ip" -j RETURN
+        iptables -w -t mangle -A SBX_MARK -s "$ip" -j SBX_MARK_RULES
     done
+    iptables -w -t mangle -A SBX_MARK -j RETURN
+
+    iptables -w -t mangle -A SBX_MARK_RULES -p tcp --dport 53 -j RETURN
+    iptables -w -t mangle -A SBX_MARK_RULES -p udp --dport 53 -j RETURN
+    iptables -w -t mangle -A SBX_MARK_RULES -m mark --mark "$ROUTING_MARK" -j RETURN
 
     for ip in $RESERVED_IPV4; do
-        iptables -w -t mangle -A SBX_MARK -d "$ip" -j RETURN
+        iptables -w -t mangle -A SBX_MARK_RULES -d "$ip" -j RETURN
     done
 
     if [ "$COMMON_PORTS" = "ON" ]; then
-        iptables -w -t mangle -A SBX_MARK -p tcp ! -d 28.0.0.0/8 -m multiport ! --dports "$PROXY_PORTS" -j RETURN
-        iptables -w -t mangle -A SBX_MARK -p udp ! -d 28.0.0.0/8 -m multiport ! --dports "$PROXY_PORTS" -j RETURN
+        iptables -w -t mangle -A SBX_MARK_RULES -p tcp ! -d 28.0.0.0/8 -m multiport ! --dports "$PROXY_PORTS" -j RETURN
+        iptables -w -t mangle -A SBX_MARK_RULES -p udp ! -d 28.0.0.0/8 -m multiport ! --dports "$PROXY_PORTS" -j RETURN
     fi
 
     case "$ROUTE_MODE" in
         tproxy|TProxy|TPROXY)
-            iptables -w -t mangle -A SBX_MARK -p tcp -j TPROXY --on-port "$TPROXY_PORT" --tproxy-mark "$FW_MARK"
-            iptables -w -t mangle -A SBX_MARK -p udp -j TPROXY --on-port "$TPROXY_PORT" --tproxy-mark "$FW_MARK"
+            iptables -w -t mangle -A SBX_MARK_RULES -p tcp -j TPROXY --on-port "$TPROXY_PORT" --tproxy-mark "$FW_MARK"
+            iptables -w -t mangle -A SBX_MARK_RULES -p udp -j TPROXY --on-port "$TPROXY_PORT" --tproxy-mark "$FW_MARK"
             ;;
         tun|TUN)
-            iptables -w -t mangle -A SBX_MARK -p tcp -j MARK --set-mark "$FW_MARK"
-            iptables -w -t mangle -A SBX_MARK -p udp -j MARK --set-mark "$FW_MARK"
+            iptables -w -t mangle -A SBX_MARK_RULES -p tcp -j MARK --set-mark "$FW_MARK"
+            iptables -w -t mangle -A SBX_MARK_RULES -p udp -j MARK --set-mark "$FW_MARK"
             ;;
     esac
 

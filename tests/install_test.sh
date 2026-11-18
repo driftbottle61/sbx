@@ -17,9 +17,11 @@ test -x "$SBX_BIN_DIR/sbx"
 test "$(stat -c '%a' "$SBX_INSTALL_DIR/data/sbx.conf")" = "600"
 
 printf 'CONFIG_URL="https://example.invalid/config"\n' > "$SBX_INSTALL_DIR/data/sbx.conf"
+printf '192.0.2.0/24\n' > "$SBX_INSTALL_DIR/data/cn_ip.txt"
 "$project_dir/install.sh" --skip-deps
 grep -q 'example.invalid' "$SBX_INSTALL_DIR/data/sbx.conf"
 grep -q "SBX_VERSION=\"$project_version\"" "$SBX_INSTALL_DIR/data/sbx.conf"
+grep -qx '192.0.2.0/24' "$SBX_INSTALL_DIR/data/cn_ip.txt"
 
 test_root_config="$test_root/config.sh"
 sed "s#config_file=\"/opt/sbx/data/sbx.conf\"#config_file=\"$test_root/sbx.conf\"#" \
@@ -58,6 +60,19 @@ test "$LAN_IPV4_ALLOW" = "192.168.100.0/24 192.168.88.0/24 192.168.50.0/24 192.1
 test "$LAN_IPV4_EXTRA" = "192.168.77.0/24"
 test "$COMMON_PORTS" = "OFF"
 test "$FIREWALL_BACKEND" = "nftables"
+
+injection_file="$test_root/injection.conf"
+bash -c 'source "$1"; error(){ printf "ERROR: %s\n" "$*" >&2; }; config_set EVIL "$2" "$3"' _ \
+    "$project_dir/lib/config.sh" \
+    'x"; touch /tmp/sbx-injected-a; #$HOME `touch /tmp/sbx-injected-b` $(touch /tmp/sbx-injected-c) \ end' \
+    "$injection_file"
+test ! -e /tmp/sbx-injected-a
+test ! -e /tmp/sbx-injected-b
+test ! -e /tmp/sbx-injected-c
+. "$injection_file"
+test "$EVIL" = 'x"; touch /tmp/sbx-injected-a; #$HOME `touch /tmp/sbx-injected-b` $(touch /tmp/sbx-injected-c) \ end'
+
+bash "$project_dir/tests/route_logic_test.sh"
 
 "$SBX_INSTALL_DIR/uninstall.sh"
 test ! -e "$SBX_INSTALL_DIR"

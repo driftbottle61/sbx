@@ -202,8 +202,9 @@ write_resolv_conf(){
     : > "$resolv_conf_file" || return 1
 
     for item in $dns; do
-        printf 'nameserver %s\n' "$item" >> "$resolv_conf_file"
+        printf 'nameserver %s\n' "$item" >> "$resolv_conf_file" || return 1
     done
+    return 0
 }
 
 netplan_iface_file(){
@@ -243,7 +244,7 @@ write_netplan_config(){
         return 1
     fi
 
-    cat > "$file" <<EOF
+    cat > "$file" <<EOF || return 1
 network:
   version: 2
   ethernets:
@@ -254,7 +255,7 @@ network:
 EOF
 
     if [ -n "$gateway" ]; then
-        cat >> "$file" <<EOF
+        cat >> "$file" <<EOF || return 1
       routes:
         - to: default
           via: $gateway
@@ -262,16 +263,17 @@ EOF
     fi
 
     if [ -n "$dns" ]; then
-        cat >> "$file" <<EOF
+        cat >> "$file" <<EOF || return 1
       nameservers:
         addresses:
 EOF
         for item in $dns; do
-            printf '          - %s\n' "$item" >> "$file"
+            printf '          - %s\n' "$item" >> "$file" || return 1
         done
     fi
 
     chmod 600 "$file" 2>/dev/null || true
+    return 0
 }
 
 write_systemd_network_config(){
@@ -285,7 +287,7 @@ write_systemd_network_config(){
     mkdir -p "$systemd_network_dir"
 
     # 只重写当前接口，保留其它 SBX/系统 networkd 配置。
-    cat > "$file" <<EOF
+    cat > "$file" <<EOF || return 1
 [Match]
 Name=$iface
 
@@ -293,11 +295,12 @@ Name=$iface
 Address=$ip_cidr
 EOF
 
-    [ -n "$gateway" ] && printf 'Gateway=%s\n' "$gateway" >> "$file"
+    [ -n "$gateway" ] && { printf 'Gateway=%s\n' "$gateway" >> "$file" || return 1; }
 
     for item in $dns; do
-        printf 'DNS=%s\n' "$item" >> "$file"
+        printf 'DNS=%s\n' "$item" >> "$file" || return 1
     done
+    return 0
 }
 
 ifupdown_file_has_iface(){
@@ -382,7 +385,7 @@ write_ifupdown_config(){
         [ -s "$tmp" ] && printf '\n' >> "$tmp"
     fi
 
-    cat >> "$tmp" <<EOF
+    cat >> "$tmp" <<EOF || { rm -f "$tmp"; return 1; }
 # Managed by SBX
 auto $iface
 iface $iface inet static
@@ -390,12 +393,13 @@ iface $iface inet static
     netmask $netmask
 EOF
 
-    [ -n "$gateway" ] && printf '    gateway %s\n' "$gateway" >> "$tmp"
-    [ -n "$dns" ] && printf '    dns-nameservers %s\n' "$dns" >> "$tmp"
+    [ -n "$gateway" ] && { printf '    gateway %s\n' "$gateway" >> "$tmp" || { rm -f "$tmp"; return 1; }; }
+    [ -n "$dns" ] && { printf '    dns-nameservers %s\n' "$dns" >> "$tmp" || { rm -f "$tmp"; return 1; }; }
 
     chmod 644 "$tmp" 2>/dev/null || true
-    cat "$tmp" > "$file"
+    cat "$tmp" > "$file" || { rm -f "$tmp"; return 1; }
     rm -f "$tmp"
+    return 0
 }
 
 apply_network_config(){
@@ -405,15 +409,17 @@ apply_network_config(){
 
     case "$backend" in
         netplan)
-            netplan generate && netplan apply
+            netplan generate || return 1
+            netplan apply || return 1
             ;;
         systemd-networkd)
             # Flush runtime addresses before networkd reconfigures the link;
             # otherwise the old static address can survive the restart.
             [ -n "$iface" ] && ip -4 addr flush dev "$iface" scope global 2>/dev/null || true
             networkctl reload 2>/dev/null || true
-            systemctl restart systemd-networkd
+            systemctl restart systemd-networkd || return 1
             [ -n "$iface" ] && networkctl reconfigure "$iface" 2>/dev/null || true
+            return 0
             ;;
         ifupdown)
             if command -v ifreload >/dev/null 2>&1; then
@@ -433,11 +439,13 @@ apply_network_config(){
                 ip route del default dev "$iface" 2>/dev/null || true
                 ip route replace default via "$gateway" dev "$iface" 2>/dev/null || true
             fi
+            return 0
             ;;
         resolv.conf)
             if command -v resolvectl >/dev/null 2>&1; then
                 resolvectl flush-caches 2>/dev/null || true
             fi
+            return 0
             ;;
         *)
             return 1
@@ -455,6 +463,39 @@ save_network_config(){
 
     backup_network_config "$backend"
 
+    # 先确认配置已经完整写入磁盘，再停止 DHCP 并应用。否则写入失败时
+    # 旧地址已释放、新地址未生效，会直接把当前连接断掉。
+    case "$backend" in
+        netplan)
+            write_netplan_config "$iface" "$ip_cidr" "$gateway" "$dns" || {
+                error "写入 netplan 配置失败，未应用任何网络更改"
+                return 1
+            }
+            ;;
+        systemd-networkd)
+            write_systemd_network_config "$iface" "$ip_cidr" "$gateway" "$dns" || {
+                error "写入 systemd-networkd 配置失败，未应用任何网络更改"
+                return 1
+            }
+            ;;
+        ifupdown)
+            write_ifupdown_config "$iface" "$ip_cidr" "$gateway" "$dns" || {
+                error "写入 ifupdown 配置失败，未应用任何网络更改"
+                return 1
+            }
+            ;;
+        resolv.conf)
+            write_resolv_conf "$dns" || {
+                error "写入 resolv.conf 失败，未应用任何网络更改"
+                return 1
+            }
+            ;;
+        *)
+            error "不支持的网络后端：$backend"
+            return 1
+            ;;
+    esac
+
     # Debian 13 may run dhcpcd independently of ifupdown. When switching to a
     # static address it will otherwise immediately restore the old DHCP lease.
     if [ -n "$ip_cidr" ]; then
@@ -468,25 +509,6 @@ save_network_config(){
         fi
         pkill -f "dhcpcd: $iface" >/dev/null 2>&1 || true
     fi
-
-    case "$backend" in
-        netplan)
-            write_netplan_config "$iface" "$ip_cidr" "$gateway" "$dns"
-            ;;
-        systemd-networkd)
-            write_systemd_network_config "$iface" "$ip_cidr" "$gateway" "$dns"
-            ;;
-        ifupdown)
-            write_ifupdown_config "$iface" "$ip_cidr" "$gateway" "$dns"
-            ;;
-        resolv.conf)
-            write_resolv_conf "$dns"
-            ;;
-        *)
-            error "不支持的网络后端：$backend"
-            return 1
-            ;;
-    esac
 
     apply_network_config "$backend" "$iface"
     local apply_status=$?

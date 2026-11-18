@@ -74,9 +74,16 @@ download_release() {
 
     echo "$URL"
 
-    sbx_wget -O /tmp/sing-box.tar.gz "$URL"
+    sbx_download_dir="$(mktemp -d /tmp/sbx-singbox.XXXXXX)" || {
+        error "无法创建下载临时目录"
+        return 1
+    }
+    sbx_archive="$sbx_download_dir/sing-box.tar.gz"
 
-    if [ $? -ne 0 ]; then
+    if ! sbx_wget -O "$sbx_archive" "$URL"; then
+        rm -rf "$sbx_download_dir"
+        sbx_download_dir=""
+        sbx_archive=""
         error "下载失败"
         return 1
     fi
@@ -86,19 +93,46 @@ download_release() {
 
 install_binary() {
 
-    rm -rf /tmp/sbx-install
+    local extract_dir
 
-    mkdir -p /tmp/sbx-install
+    if [ -z "${sbx_download_dir:-}" ] || [ ! -d "$sbx_download_dir" ]; then
+        error "下载临时目录不存在，请重新下载"
+        return 1
+    fi
 
-    tar -xf /tmp/sing-box.tar.gz \
-        -C /tmp/sbx-install
+    extract_dir="$sbx_download_dir/extract"
+    mkdir -p "$extract_dir" || {
+        rm -rf "$sbx_download_dir"
+        sbx_download_dir=""
+        sbx_archive=""
+        error "无法创建解压目录"
+        return 1
+    }
 
-    install -m 755 \
-        /tmp/sbx-install/*/sing-box \
-        "$SINGBOX_BIN"
+    if ! tar -xf "$sbx_archive" -C "$extract_dir"; then
+        rm -rf "$sbx_download_dir"
+        sbx_download_dir=""
+        sbx_archive=""
+        error "解压失败"
+        return 1
+    fi
+
+    if ! install -m 755 \
+        "$extract_dir"/*/sing-box \
+        "$SINGBOX_BIN"; then
+        rm -rf "$sbx_download_dir"
+        sbx_download_dir=""
+        sbx_archive=""
+        error "安装 sing-box 失败"
+        return 1
+    fi
+
+    rm -rf "$sbx_download_dir"
+    sbx_download_dir=""
+    sbx_archive=""
 
     ok "安装完成"
-
+    return 0
 }
 
 install_latest() {
@@ -130,7 +164,10 @@ install_latest() {
         return
     }
 
-    install_binary
+    install_binary || {
+        pause
+        return 1
+    }
     if [ "$fresh_install" -eq 1 ]; then
         first_install_setup
     else
