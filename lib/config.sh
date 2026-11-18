@@ -11,6 +11,33 @@ load_config(){
     fi
 
 }
+
+config_set(){
+    local key="$1" value="$2" file="${3:-$config_file}" escaped
+
+    [ -f "$file" ] || : > "$file"
+    escaped="$(printf '%s' "$value" | sed 's/[\\&|]/\\&/g')"
+    if grep -q "^${key}=" "$file" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=\"${escaped}\"|" "$file"
+    else
+        printf '%s="%s"\n' "$key" "$value" >> "$file"
+    fi
+}
+
+save_config_urls(){
+    config_set SBX_VERSION "$SBX_VERSION"
+    config_set CONFIG_DIR "$CONFIG_DIR"
+    config_set CONFIG_FILE "$CONFIG_FILE"
+    config_set CONFIG_BACKUP "$CONFIG_BACKUP"
+    config_set CONFIG_URL "$CONFIG_URL"
+    config_set CONFIG_URL_TPROXY "${CONFIG_URL_TPROXY:-}"
+    config_set CONFIG_URL_TUN "${CONFIG_URL_TUN:-}"
+    config_set SINGBOX_BIN "$SINGBOX_BIN"
+    config_set SERVICE_NAME "$SERVICE_NAME"
+    config_set SERVICE_FILE "$SERVICE_FILE"
+    config_set ROUTE_MODE "${ROUTE_MODE:-tproxy}"
+}
+
 set_config_url_value(){
 local URL="$1"
 load_config
@@ -27,20 +54,8 @@ echo
 
 [ -z "$ROUTE_MODE" ] && ROUTE_MODE="tproxy"
 
-
-cat > "$config_file" <<EOF
-SBX_VERSION="${SBX_VERSION}"
-CONFIG_DIR="${CONFIG_DIR}"
-CONFIG_FILE="${CONFIG_FILE}"
-CONFIG_BACKUP="${CONFIG_BACKUP}"
-CONFIG_URL="${URL}"
-CONFIG_URL_TPROXY="${CONFIG_URL_TPROXY:-}"
-CONFIG_URL_TUN="${CONFIG_URL_TUN:-}"
-SINGBOX_BIN="${SINGBOX_BIN}"
-SERVICE_NAME="${SERVICE_NAME}"
-SERVICE_FILE="${SERVICE_FILE}"
-ROUTE_MODE="${ROUTE_MODE}"
-EOF
+CONFIG_URL="$URL"
+save_config_urls
 
 ok "配置保存成功"
 
@@ -52,19 +67,7 @@ set_config_urls(){
     CONFIG_URL_TPROXY="$tproxy_url"
     CONFIG_URL_TUN="$tun_url"
     if [ "$ROUTE_MODE" = "tun" ]; then CONFIG_URL="$tun_url"; else CONFIG_URL="$tproxy_url"; fi
-    cat > "$config_file" <<EOF
-SBX_VERSION="${SBX_VERSION}"
-CONFIG_DIR="${CONFIG_DIR}"
-CONFIG_FILE="${CONFIG_FILE}"
-CONFIG_BACKUP="${CONFIG_BACKUP}"
-CONFIG_URL="${CONFIG_URL}"
-CONFIG_URL_TPROXY="${CONFIG_URL_TPROXY}"
-CONFIG_URL_TUN="${CONFIG_URL_TUN}"
-SINGBOX_BIN="${SINGBOX_BIN}"
-SERVICE_NAME="${SERVICE_NAME}"
-SERVICE_FILE="${SERVICE_FILE}"
-ROUTE_MODE="${ROUTE_MODE}"
-EOF
+    save_config_urls
     ok "配置保存成功"
 }
 
@@ -103,19 +106,8 @@ if [ "$ROUTE_MODE" = "tun" ]; then
 else
     CONFIG_URL_TPROXY="$URL"
 fi
-cat > "$config_file" <<EOF
-SBX_VERSION="${SBX_VERSION}"
-CONFIG_DIR="${CONFIG_DIR}"
-CONFIG_FILE="${CONFIG_FILE}"
-CONFIG_BACKUP="${CONFIG_BACKUP}"
-CONFIG_URL="${URL}"
-CONFIG_URL_TPROXY="${CONFIG_URL_TPROXY:-}"
-CONFIG_URL_TUN="${CONFIG_URL_TUN:-}"
-SINGBOX_BIN="${SINGBOX_BIN}"
-SERVICE_NAME="${SERVICE_NAME}"
-SERVICE_FILE="${SERVICE_FILE}"
-ROUTE_MODE="${ROUTE_MODE}"
-EOF
+CONFIG_URL="$URL"
+save_config_urls
 ok "配置保存成功"
 
 pause
