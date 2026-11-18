@@ -275,6 +275,23 @@ start_sbx_route(){
     fi
 }
 
+cn_elements_from_file(){
+    # 兼容 mawk：不用 {n,m} 间隔量词，Debian 默认 awk 不支持。
+    awk '
+        {
+            sub(/#.*/, "", $0)
+            gsub(/[[:space:]]/, "", $0)
+            if ($0 == "") next
+            if ($0 !~ /^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*(\/[0-9][0-9]*)?$/) {
+                printf "跳过无效 CN 网段：%s\n", $0 > "/dev/stderr"
+                next
+            }
+            printf "%s%s", sep, $0
+            sep = ", "
+        }
+    ' "$1"
+}
+
 start_sbx_nft(){
     local lan_ips reserved_ips dns_reserved_ips local_ips gid ports jump
     local nft_file cn_elements=""
@@ -314,19 +331,7 @@ start_sbx_nft(){
         echo "table inet sbx {"
         if [ "$CN_IP_ROUTE" = "ON" ] && [ -s "$CN_IP_FILE" ]; then
             # 一次性把全部网段写进初始事务，避免“表已提交但集合为空”的窗口。
-            cn_elements="$(awk '
-                {
-                    sub(/#.*/, "", $0)
-                    gsub(/[[:space:]]/, "", $0)
-                    if ($0 == "") next
-                    if ($0 !~ /^([0-9]{1,3}\.){3}[0-9]{1,3}(\/[0-9]{1,2})?$/) {
-                        printf "跳过无效 CN 网段：%s\n", $0 > "/dev/stderr"
-                        next
-                    }
-                    printf "%s%s", sep, $0
-                    sep = ", "
-                }
-            ' "$CN_IP_FILE")"
+            cn_elements="$(cn_elements_from_file "$CN_IP_FILE")"
             echo "  set cn_ip {"
             echo "    type ipv4_addr"
             echo "    flags interval"

@@ -82,6 +82,18 @@ grep -Fq -- '-A SBX_MARK_RULES -p tcp -j TPROXY' "$IPT_LOG"
 start_sbx_nft
 
 grep -Fq 'elements = { 1.0.1.0/24, 223.5.5.0/24 }' "$NFT_LOG"
+
+# Debian 默认 awk 是 mawk，不支持 {n,m} 间隔量词；确保 CN 解析在 mawk 下也正确。
+if command -v mawk >/dev/null 2>&1; then
+    mkdir -p "$test_root/mawk-bin"
+    cat > "$test_root/mawk-bin/awk" <<'STUB'
+#!/bin/sh
+exec mawk "$@"
+STUB
+    chmod +x "$test_root/mawk-bin/awk"
+    mawk_out="$(PATH="$test_root/mawk-bin:$PATH" cn_elements_from_file "$CN_IP_FILE")"
+    test "$mawk_out" = "1.0.1.0/24, 223.5.5.0/24"
+fi
 grep -Fq 'ip daddr @cn_ip return' "$NFT_LOG"
 test "$(wc -l < "$NFT_CALLS")" -eq 1
 
